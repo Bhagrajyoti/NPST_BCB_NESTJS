@@ -1,0 +1,1 @@
+Your registration OTP is {{otp}}. It expires in {{ttlMinutes}} minutes.
