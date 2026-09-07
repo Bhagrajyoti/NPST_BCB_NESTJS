@@ -14,7 +14,7 @@ export class EventLog {
   @Column({ name: 'event_name' })
   eventName: string;
 
-  @Column('jsonb')
+  @Column('json')
   payload: Record<string, unknown>;
 
   @CreateDateColumn({ name: 'created_at' })

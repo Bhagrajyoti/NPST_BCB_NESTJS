@@ -3,11 +3,11 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 
 // Single Postgres instance, three logical schemas: identity, billpay, admin.
 const options: DataSourceOptions = {
-  type: 'postgres',
+  type: 'mysql',
   host: process.env.DB_HOST ?? 'localhost',
-  port: parseInt(process.env.DB_PORT ?? '5432', 10),
-  username: process.env.DB_USERNAME ?? 'postgres',
-  password: process.env.DB_PASSWORD ?? 'postgres',
+  port: parseInt(process.env.DB_PORT ?? '3306', 10),
+  username: process.env.DB_USERNAME ?? 'root',
+  password: process.env.DB_PASSWORD ?? 'supersecretrootpassword',
   database: process.env.DB_DATABASE ?? 'identity_billpay_admin',
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../**/migrations/*{.ts,.js}'],

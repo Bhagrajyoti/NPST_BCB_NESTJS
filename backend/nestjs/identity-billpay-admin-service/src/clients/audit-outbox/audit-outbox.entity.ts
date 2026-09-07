@@ -14,7 +14,7 @@ export class AuditOutbox {
   @Column({ name: 'event_type' })
   eventType: string;
 
-  @Column('jsonb')
+  @Column('json')
   payload: Record<string, unknown>;
 
   @Column({ default: 'PENDING' })

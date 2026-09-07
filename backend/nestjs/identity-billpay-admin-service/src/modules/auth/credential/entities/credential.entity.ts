@@ -17,7 +17,7 @@ export class Credential {
   @Column({ name: 'password_hash' })
   passwordHash: string;
 
-  @Column({ name: 'last_rotated_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'last_rotated_at', type: 'datetime', nullable: true })
   lastRotatedAt: Date;
 
   @CreateDateColumn({ name: 'created_at' })

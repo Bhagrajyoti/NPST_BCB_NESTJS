@@ -20,10 +20,10 @@ export class OtpChallenge {
   @Column({ name: 'attempt_count', default: 0 })
   attemptCount: number;
 
-  @Column({ name: 'locked_until', type: 'timestamptz', nullable: true })
+  @Column({ name: 'locked_until', type: 'datetime', nullable: true })
   lockedUntil: Date;
 
-  @Column({ name: 'expires_at', type: 'timestamptz' })
+  @Column({ name: 'expires_at', type: 'datetime' })
   expiresAt: Date;
 
   @CreateDateColumn({ name: 'created_at' })

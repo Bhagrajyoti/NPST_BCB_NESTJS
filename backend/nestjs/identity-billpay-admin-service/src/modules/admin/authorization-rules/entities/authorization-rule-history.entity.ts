@@ -14,7 +14,7 @@ export class AuthorizationRuleHistory {
   @Column({ name: 'rule_id' })
   ruleId: string;
 
-  @Column('jsonb')
+  @Column('json')
   snapshot: Record<string, unknown>;
 
   @Column()

@@ -20,6 +20,8 @@ import { AuditOutboxModule } from './clients/audit-outbox/audit-outbox.module';
 import { KeycloakAuthGuard } from './common/guards/keycloak-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
+import { TerminusModule } from '@nestjs/terminus';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -35,6 +37,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     BillPaymentModule,
     AdminModule,
+    TerminusModule,
   ],
   controllers: [HealthController],
   providers: [

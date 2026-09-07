@@ -7,7 +7,7 @@ import {
   Unique,
 } from 'typeorm';
 
-@Entity({ name: 'mock_bill', schema: 'billpay' })
+@Entity({ name: 'mock_bill' })
 @Unique(['billerCode', 'customerBillNumber'])
 export class MockBill {
   @PrimaryGeneratedColumn('uuid')
@@ -25,7 +25,7 @@ export class MockBill {
   @Column({ name: 'customer_name' })
   customerName: string;
 
-  @Column({ type: 'numeric', precision: 12, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
 
   @Column({ name: 'due_date', type: 'date' })
