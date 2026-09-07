@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RegistrationAttempt } from './entities/registration-attempt.entity';
+import { InitRegistrationDto } from './dto/init-registration.dto';
 
 @Injectable()
 export class RegistrationService {
@@ -14,12 +15,26 @@ export class RegistrationService {
     return this.repository.find();
   }
 
-  findOne(id: string) {
-    return this.repository.findOne({ where: { id } as any });
+  async findOne(id: string) {
+    const record = await this.repository.findOne({ where: { id } });
+    if (!record) {
+      throw new NotFoundException('Registration attempt not found');
+    }
+    return record;
   }
 
-  create(data: Partial<RegistrationAttempt>) {
-    const entity = this.repository.create(data);
+  create(dto: InitRegistrationDto) {
+    const entity = this.repository.create({
+      mobileNumber: dto.mobileNumber,
+      panOrCif: dto.panOrCif,
+      currentStep: 'INIT',
+    });
     return this.repository.save(entity);
+  }
+
+  async softDelete(id: string) {
+    await this.findOne(id);
+    await this.repository.softDelete(id);
+    return { id, deleted: true };
   }
 }
