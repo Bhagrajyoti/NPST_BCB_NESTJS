@@ -1,31 +1,17 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
+import { SoftDeleteEntity } from '../../../../common/entities/soft-delete.entity';
 
-@Entity({ name: 'device_profile', schema: 'identity' })
-export class DeviceProfile {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+@Entity({ name: 'device_profile' })
+export class DeviceProfile extends SoftDeleteEntity {
   @Column({ name: 'user_id' })
   userId: string;
 
   @Column({ name: 'device_id' })
   deviceId: string;
 
-  @Column({ name: 'device_model', nullable: true })
-  deviceModel: string;
+  @Column({ name: 'device_model', type: 'varchar', length: 255, nullable: true })
+  deviceModel: string | null;
 
   @Column({ default: false })
   trusted: boolean;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
 }

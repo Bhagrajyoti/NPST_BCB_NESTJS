@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RegistrationController } from './registration/registration.controller';
 import { RegistrationService } from './registration/registration.service';
@@ -12,6 +13,7 @@ import { DeviceController } from './device/device.controller';
 import { DeviceService } from './device/device.service';
 import { DeviceProfile } from './device/entities/device-profile.entity';
 import { CorporateHierarchyController } from './corporate-hierarchy/corporate-hierarchy.controller';
+import { SessionController } from './session/session.controller';
 import { CorporateHierarchyService } from './corporate-hierarchy/corporate-hierarchy.service';
 import { CorporateHierarchy } from './corporate-hierarchy/entities/corporate-hierarchy.entity';
 import { OtpController } from './otp/otp.controller';
@@ -21,6 +23,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
 
 @Module({
   imports: [
+    HttpModule,
     TypeOrmModule.forFeature([
       RegistrationAttempt,
       Credential,
@@ -35,6 +38,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
     DeviceController,
     CorporateHierarchyController,
     OtpController,
+    SessionController,
   ],
   providers: [
     RegistrationService,

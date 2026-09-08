@@ -1,16 +1,8 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
+import { SoftDeleteEntity } from '../../../../common/entities/soft-delete.entity';
 
-@Entity({ name: 'registration_attempt', schema: 'identity' })
-export class RegistrationAttempt {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+@Entity({ name: 'registration_attempt' })
+export class RegistrationAttempt extends SoftDeleteEntity {
   @Column({ name: 'mobile_number' })
   mobileNumber: string;
 
@@ -20,12 +12,6 @@ export class RegistrationAttempt {
   @Column({ name: 'current_step', default: 'INIT' })
   currentStep: string;
 
-  @Column({ name: 'failure_reason', nullable: true })
-  failureReason: string;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @Column({ name: 'failure_reason', type: 'varchar', length: 500, nullable: true })
+  failureReason: string | null;
 }
