@@ -9,7 +9,8 @@ import { BillPayment } from './payment/entities/bill-payment.entity';
 import { BillScheduleService } from './scheduling/bill-schedule.service';
 import { BillSchedule } from './scheduling/entities/bill-schedule.entity';
 import { MockBill } from './bill/entities/mock-bill.entity';
-
+import { BillController } from './bill/controller/bill.controller';
+import { BillService } from './bill/service/bill.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -19,8 +20,17 @@ import { MockBill } from './bill/entities/mock-bill.entity';
       MockBill,
     ]),
   ],
-  controllers: [BillerController, PaymentController],
-  providers: [BillerService, PaymentService, BillScheduleService],
+  controllers: [
+  BillerController,
+  PaymentController,
+  BillController,
+],
+  providers: [
+  BillerService,
+  PaymentService,
+  BillScheduleService,
+  BillService,
+],
   exports: [PaymentService],
 })
 export class BillPaymentModule {}

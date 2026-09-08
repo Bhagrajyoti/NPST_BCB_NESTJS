@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity({ name: 'bill_payment', schema: 'billpay' })
+@Entity({ name: 'bill_payment' })
 export class BillPayment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -17,7 +17,11 @@ export class BillPayment {
   @Column({ name: 'consumer_number' })
   consumerNumber: string;
 
-  @Column('numeric')
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+  })
   amount: number;
 
   @Column({ default: 'PENDING' })

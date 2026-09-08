@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 
 @Entity({ name: 'mock_bill' })
-@Unique(['billerCode', 'customerBillNumber'])
+@Unique(['billerCode', 'consumerNumber'])
 export class MockBill {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -16,8 +16,11 @@ export class MockBill {
   @Column({ name: 'biller_code' })
   billerCode: string;
 
-  @Column({ name: 'customer_bill_number' })
-  customerBillNumber: string;
+  @Column({ name: 'consumer_number' })
+  consumerNumber: string;
+
+  @Column({ name: 'bill_number' })
+  billNumber: string;
 
   @Column({ name: 'registered_mobile' })
   registeredMobile: string;
@@ -25,7 +28,11 @@ export class MockBill {
   @Column({ name: 'customer_name' })
   customerName: string;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2 })
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+  })
   amount: number;
 
   @Column({ name: 'due_date', type: 'date' })
