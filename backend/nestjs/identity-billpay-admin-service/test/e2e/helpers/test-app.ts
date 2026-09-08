@@ -39,6 +39,7 @@ export const mockKeycloakService = {
   findUsersByUsername: jest.fn().mockResolvedValue([]),
   disableUser: jest.fn().mockResolvedValue(undefined),
   forceLogout: jest.fn().mockResolvedValue(undefined),
+  resetUserPassword: jest.fn().mockResolvedValue(undefined),
 };
 
 export async function createTestApp(

@@ -19,10 +19,11 @@ export class LoginDto {
   password: string;
 
   @ApiPropertyOptional({
-    description: 'Keycloak client to authenticate against',
+    description:
+      'Keycloak client: `mobile-app` for **customer mobile app**, `admin-web` for **bank admin portal**',
     enum: ['admin-web', 'mobile-app'],
     default: 'admin-web',
-    example: 'admin-web',
+    example: 'mobile-app',
   })
   @IsOptional()
   @IsString()

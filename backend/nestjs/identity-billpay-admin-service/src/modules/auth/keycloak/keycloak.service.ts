@@ -257,6 +257,10 @@ export class KeycloakService {
     );
   }
 
+  async resetUserPassword(userId: string, password: string): Promise<void> {
+    await this.setUserPassword(userId, password);
+  }
+
   async removeRealmRoleFromUser(userId: string, roleName: string): Promise<void> {
     const token = await this.getAdminAccessToken();
     const { data: role } = await firstValueFrom(

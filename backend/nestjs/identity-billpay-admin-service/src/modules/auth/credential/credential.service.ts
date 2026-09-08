@@ -1,39 +1,99 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Credential } from './entities/credential.entity';
+import { KeycloakService } from '../keycloak/keycloak.service';
+import { GetCredentialDto } from './dto/get-credential.dto';
 import { SetCredentialDto } from './dto/set-credential.dto';
+import { Credential } from './entities/credential.entity';
+import { hashMpin } from './utils/mpin-hash.util';
 
 @Injectable()
 export class CredentialService {
   constructor(
     @InjectRepository(Credential)
     private readonly repository: Repository<Credential>,
+    private readonly keycloakService: KeycloakService,
   ) {}
 
   findAll() {
-    return this.repository.find();
+    return this.repository.find().then((records) => records.map((record) => this.toPublicView(record)));
   }
 
-  async findOne(id: string) {
-    const record = await this.repository.findOne({ where: { id } });
+  async findByKeycloakUserId(keycloakUserId: string) {
+    const record = await this.repository.findOne({ where: { keycloakUserId } });
     if (!record) {
-      throw new NotFoundException('Credential not found');
+      throw new NotFoundException(
+        `No MPIN credential found for Keycloak user ${keycloakUserId}. ` +
+          'Login passwords are managed by Keycloak only — create an MPIN via POST /auth/credential/create.',
+      );
     }
-    return record;
+    return this.toPublicView(record);
   }
 
-  create(dto: SetCredentialDto) {
-    const entity = this.repository.create({
-      userId: dto.userId,
-      passwordHash: dto.password,
-    });
-    return this.repository.save(entity);
+  async resolveGet(dto: GetCredentialDto, actorSub?: string) {
+    const keycloakUserId = dto.userId ?? actorSub;
+    if (!keycloakUserId) {
+      throw new BadRequestException(
+        'userId is required when no authenticated user is present in the Bearer token',
+      );
+    }
+    return this.findByKeycloakUserId(keycloakUserId);
   }
 
-  async softDelete(id: string) {
-    await this.findOne(id);
-    await this.repository.softDelete(id);
-    return { id, deleted: true };
+  async create(dto: SetCredentialDto) {
+    if (!dto.password && !dto.mpin) {
+      throw new BadRequestException('Provide either password (Keycloak) or mpin (local storage)');
+    }
+
+    let passwordUpdated = false;
+    let mpinRecord: Credential | null = null;
+
+    if (dto.password) {
+      await this.keycloakService.resetUserPassword(dto.userId, dto.password);
+      passwordUpdated = true;
+    }
+
+    if (dto.mpin) {
+      const existing = await this.repository.findOne({ where: { keycloakUserId: dto.userId } });
+      if (existing) {
+        existing.hashedMpin = hashMpin(dto.mpin);
+        existing.lastRotatedAt = new Date();
+        mpinRecord = await this.repository.save(existing);
+      } else {
+        mpinRecord = await this.repository.save(
+          this.repository.create({
+            keycloakUserId: dto.userId,
+            hashedMpin: hashMpin(dto.mpin),
+            lastRotatedAt: new Date(),
+          }),
+        );
+      }
+    }
+
+    return {
+      keycloakUserId: dto.userId,
+      passwordUpdated,
+      mpin: mpinRecord ? this.toPublicView(mpinRecord) : null,
+    };
+  }
+
+  async softDeleteByKeycloakUserId(keycloakUserId: string) {
+    const record = await this.repository.findOne({ where: { keycloakUserId } });
+    if (!record) {
+      throw new NotFoundException(`No MPIN credential found for Keycloak user ${keycloakUserId}`);
+    }
+    await this.repository.softDelete(record.id);
+    return { keycloakUserId, deleted: true };
+  }
+
+  private toPublicView(record: Credential) {
+    return {
+      id: record.id,
+      keycloakUserId: record.keycloakUserId,
+      hasMpin: true,
+      lastRotatedAt: record.lastRotatedAt,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    };
   }
 }

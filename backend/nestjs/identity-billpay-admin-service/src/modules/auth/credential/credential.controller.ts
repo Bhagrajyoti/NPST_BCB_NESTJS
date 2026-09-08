@@ -1,42 +1,69 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { IdRequestDto } from '../../../common/dto/id-request.dto';
+import { AuthenticatedUser } from 'nest-keycloak-connect';
+import { adminPortalOp, mobileCustomerOp } from '../../../common/swagger/api-audience.constants';
 import { CredentialService } from './credential.service';
+import { GetCredentialDto } from './dto/get-credential.dto';
 import { SetCredentialDto } from './dto/set-credential.dto';
 
-@ApiTags('Auth — Credential')
+@ApiTags('Mobile — Credential (Customer MPIN)')
+@ApiBearerAuth()
 @Controller('auth/credential')
 export class CredentialController {
   constructor(private readonly service: CredentialService) {}
 
   @Post('list')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all credentials', description: 'Returns all active credential records.' })
+  @ApiOperation(
+    adminPortalOp(
+      'List all customer MPIN credentials',
+      'Returns all active local MPIN records for support and audit. Customers do not use this from the mobile app.',
+    ),
+  )
   list() {
     return this.service.findAll();
   }
 
   @Post('get')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get credential by ID' })
-  get(@Body() dto: IdRequestDto) {
-    return this.service.findOne(dto.id);
+  @ApiOperation(
+    mobileCustomerOp(
+      'Get customer MPIN credential',
+      'Returns the logged-in customer’s MPIN metadata from the mobile app. ' +
+        'Uses the Keycloak user ID (`sub` from POST /auth/session/me). ' +
+        'If `userId` is omitted, the authenticated Bearer token user is used.',
+    ),
+  )
+  @ApiResponse({ status: 404, description: 'No MPIN credential exists for this customer' })
+  get(
+    @Body() dto: GetCredentialDto,
+    @AuthenticatedUser() user: Record<string, unknown>,
+  ) {
+    return this.service.resolveGet(dto, user?.sub as string | undefined);
   }
 
   @Post('create')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Set user credential',
-    description: 'Stores a password credential for a user during registration or password reset.',
-  })
+  @ApiOperation(
+    mobileCustomerOp(
+      'Set customer MPIN (and optional password)',
+      'Primary mobile-app onboarding endpoint. ' +
+        '**MPIN** is hashed and stored locally for banking transactions in the mobile app. ' +
+        '**Password** (optional) is written to Keycloak only. ' +
+        'Use the customer’s Keycloak user ID (`sub` from session/me) as `userId`.',
+    ),
+  )
   create(@Body() dto: SetCredentialDto) {
     return this.service.create(dto);
   }
 
   @Post('delete')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Soft-delete credential', description: 'Marks credential as deleted without removing from DB.' })
-  delete(@Body() dto: IdRequestDto) {
-    return this.service.softDelete(dto.id);
+  @ApiOperation(
+    mobileCustomerOp(
+      'Reset customer MPIN',
+      'Soft-deletes the customer’s local MPIN record (e.g. mobile app “forgot MPIN” flow). ' +
+        'Does not change the Keycloak login password.',
+    ),
+  )
+  delete(@Body() dto: GetCredentialDto, @AuthenticatedUser() user: Record<string, unknown>) {
+    const keycloakUserId = dto.userId ?? (user?.sub as string);
+    return this.service.softDeleteByKeycloakUserId(keycloakUserId);
   }
 }

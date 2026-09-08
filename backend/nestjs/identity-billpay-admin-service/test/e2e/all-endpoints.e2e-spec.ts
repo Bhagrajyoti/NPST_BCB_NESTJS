@@ -91,6 +91,8 @@ describe('All API endpoints (e2e)', () => {
   });
 
   describe('Auth — Credential', () => {
+    const keycloakUserId = '334b032c-7468-47fa-82a3-8204b80913a2';
+
     it('POST /api/v1/auth/credential/list', async () => {
       await authedRequest(app).post('/api/v1/auth/credential/list').expect(201);
     });
@@ -98,30 +100,32 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/credential/create', async () => {
       const res = await authedRequest(app)
         .post('/api/v1/auth/credential/create')
-        .send({ userId: randomUUID(), password: 'TestPass@123' })
+        .send({ userId: keycloakUserId, mpin: '1234' })
         .expect(201);
-      expect(res.body.id).toBeDefined();
+      expect(res.body.keycloakUserId).toBe(keycloakUserId);
+      expect(res.body.mpin.hasMpin).toBe(true);
     });
 
     it('POST /api/v1/auth/credential/get', async () => {
-      const created = await authedRequest(app)
-        .post('/api/v1/auth/credential/create')
-        .send({ userId: randomUUID(), password: 'TestPass@123' });
-
       await authedRequest(app)
         .post('/api/v1/auth/credential/get')
-        .send({ id: created.body.id })
+        .send({ userId: keycloakUserId })
         .expect(201);
     });
 
-    it('POST /api/v1/auth/credential/delete', async () => {
-      const created = await authedRequest(app)
-        .post('/api/v1/auth/credential/create')
-        .send({ userId: randomUUID(), password: 'TestPass@123' });
+    it('POST /api/v1/auth/credential/get without body uses token user', async () => {
+      const userApp = await createTestApp({
+        sub: keycloakUserId,
+        realm_access: { roles: ['BANK_SUPER_ADMIN'] },
+      });
+      await authedRequest(userApp).post('/api/v1/auth/credential/get').send({}).expect(201);
+      await userApp.close();
+    });
 
+    it('POST /api/v1/auth/credential/delete', async () => {
       const res = await authedRequest(app)
         .post('/api/v1/auth/credential/delete')
-        .send({ id: created.body.id })
+        .send({ userId: keycloakUserId })
         .expect(201);
       expect(res.body.deleted).toBe(true);
     });
