@@ -1,28 +1,23 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
-@Entity({ name: 'authorization_rule_history', schema: 'admin' })
+@Entity({ name: 'authorization_rule_history' })
 export class AuthorizationRuleHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'rule_id' })
+  @Index()
+  @Column({ name: 'rule_id', type: 'uuid' })
   ruleId: string;
 
-  @Column('jsonb')
+  @Column({ type: 'json' })
   snapshot: Record<string, unknown>;
 
   @Column()
   version: number;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  @Column({ name: 'changed_by_keycloak_user_id', length: 36 })
+  changedByKeycloakUserId: string;
 
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  createdAt: Date;
 }

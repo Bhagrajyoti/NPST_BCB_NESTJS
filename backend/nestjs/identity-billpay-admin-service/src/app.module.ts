@@ -17,6 +17,7 @@ import { KeycloakConnectConfigService } from './config/keycloak-connect.config';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthController } from './common/health/health.controller';
 
 @Module({
@@ -38,6 +39,7 @@ import { HealthController } from './common/health/health.controller';
     TerminusModule,
     AuthModule,
     RbacModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [

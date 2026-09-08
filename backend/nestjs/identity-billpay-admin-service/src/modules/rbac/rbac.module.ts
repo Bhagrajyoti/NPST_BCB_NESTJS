@@ -1,3 +1,4 @@
+import { InternalEventBusModule } from '../../internal-events/internal-event-bus.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
@@ -20,6 +21,7 @@ import { UsersAccessService } from './services/users-access.service';
 @Module({
   imports: [
     AuthModule,
+    InternalEventBusModule,
     TypeOrmModule.forFeature([
       Role,
       Permission,

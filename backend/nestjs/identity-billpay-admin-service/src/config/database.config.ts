@@ -12,10 +12,12 @@ function buildDataSourceOptions(): DataSourceOptions {
     entities: [
       __dirname + '/../modules/auth/**/*.entity{.ts,.js}',
       __dirname + '/../modules/rbac/**/*.entity{.ts,.js}',
+      __dirname + '/../modules/admin/**/*.entity{.ts,.js}',
     ],
     migrations: [
       __dirname + '/../modules/auth/migrations/*{.ts,.js}',
       __dirname + '/../modules/rbac/migrations/*{.ts,.js}',
+      __dirname + '/../modules/admin/migrations/*{.ts,.js}',
     ],
     synchronize: process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',

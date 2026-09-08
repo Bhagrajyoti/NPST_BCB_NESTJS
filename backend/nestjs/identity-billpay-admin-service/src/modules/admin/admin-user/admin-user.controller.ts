@@ -1,22 +1,29 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AuthenticatedUser } from 'nest-keycloak-connect';
+import { IdRequestDto } from '../../../common/dto/id-request.dto';
 import { AdminUserService } from './admin-user.service';
+import { ListAdminUsersDto } from './dto/list-admin-users.dto';
 
+// Read-only view over admin-portal accounts. Creation and role assignment
+// stay owned by rbac/employees; this module only mirrors that data via the
+// internal event bus (see admin-user-sync.listener.ts).
+@ApiTags('Admin — Admin Users')
 @Controller('admin/admin-user')
 export class AdminUserController {
   constructor(private readonly service: AdminUserService) {}
 
-  @Get()
-  findAll() {
-    return this.service.findAll();
+  @Post('list')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List admin portal accounts (BANK_SUPER_ADMIN, BANK_ADMIN)' })
+  list(@Body() dto: ListAdminUsersDto, @AuthenticatedUser() actor: Record<string, unknown>) {
+    return this.service.findAll(dto, actor);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
-  }
-
-  @Post()
-  create(@Body() dto: Record<string, unknown>) {
-    return this.service.create(dto);
+  @Post('get')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a single admin portal account (BANK_SUPER_ADMIN, BANK_ADMIN)' })
+  get(@Body() dto: IdRequestDto, @AuthenticatedUser() actor: Record<string, unknown>) {
+    return this.service.findOne(dto.id, actor);
   }
 }
