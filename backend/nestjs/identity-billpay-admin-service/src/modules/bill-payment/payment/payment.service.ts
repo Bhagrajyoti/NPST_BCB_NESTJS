@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import { Repository } from 'typeorm';
 import { BillPayment } from './entities/bill-payment.entity';
 import { MockBill } from '../bill/entities/mock-bill.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { BbpsAdapter } from './adapter/bbps.adapter';
 
 @Injectable()
 export class PaymentService {
@@ -18,6 +20,9 @@ export class PaymentService {
 
     @InjectRepository(MockBill)
     private readonly mockBillRepository: Repository<MockBill>,
+
+    @Inject('BBPS_ADAPTER')
+    private readonly bbpsAdapter: BbpsAdapter,
   ) {}
 
   findAll() {
@@ -31,7 +36,7 @@ export class PaymentService {
   }
 
   async create(dto: CreatePaymentDto) {
-    // 1. Find the bill
+    // 1. Find bill
     const bill = await this.mockBillRepository.findOne({
       where: {
         billerCode: dto.billerCode,
@@ -68,22 +73,31 @@ export class PaymentService {
       });
     }
 
-    // 4. Create payment record
+    // 4. Call Mock BBPS
+    const bbpsResponse = await this.bbpsAdapter.pay({
+      billerCode: bill.billerCode,
+      consumerNumber: bill.consumerNumber,
+      amount: billAmount,
+    });
+
+    // 5. Create payment record
     const payment = this.paymentRepository.create({
       billerCode: bill.billerCode,
       consumerNumber: bill.consumerNumber,
       amount: billAmount,
-      status: 'SUCCESS',
-      bbpsReferenceId: `BBPS-${Date.now()}`,
+      status: bbpsResponse.status,
+      bbpsReferenceId: bbpsResponse.referenceId,
     });
 
     const savedPayment = await this.paymentRepository.save(payment);
 
-    // 5. Mark mock bill as paid
-    bill.status = 'PAID';
-    await this.mockBillRepository.save(bill);
+    // 6. Only SUCCESS marks bill as PAID
+    if (bbpsResponse.status === 'SUCCESS') {
+      bill.status = 'PAID';
+      await this.mockBillRepository.save(bill);
+    }
 
-    // 6. Return payment result
+    // 7. Return payment result
     return {
       paymentId: savedPayment.id,
       billerCode: savedPayment.billerCode,
