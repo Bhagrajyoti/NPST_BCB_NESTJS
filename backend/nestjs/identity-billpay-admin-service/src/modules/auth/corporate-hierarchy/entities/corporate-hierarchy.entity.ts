@@ -1,16 +1,8 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
+import { SoftDeleteEntity } from '../../../../common/entities/soft-delete.entity';
 
-@Entity({ name: 'corporate_hierarchy', schema: 'identity' })
-export class CorporateHierarchy {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+@Entity({ name: 'corporate_hierarchy' })
+export class CorporateHierarchy extends SoftDeleteEntity {
   @Column({ name: 'user_id' })
   userId: string;
 
@@ -20,12 +12,6 @@ export class CorporateHierarchy {
   @Column()
   role: string;
 
-  @Column({ name: 'approval_limit', type: 'numeric', nullable: true })
-  approvalLimit: number;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @Column({ name: 'approval_limit', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  approvalLimit: number | null;
 }

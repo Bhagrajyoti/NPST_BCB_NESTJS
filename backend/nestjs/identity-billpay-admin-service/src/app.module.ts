@@ -1,24 +1,23 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { TerminusModule } from '@nestjs/terminus';
 import { APP_GUARD } from '@nestjs/core';
+import {
+  AuthGuard,
+  KeycloakConnectModule,
+  RoleGuard,
+} from 'nest-keycloak-connect';
+import { DataSourceOptions } from 'typeorm';
 
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import keycloakConfig from './config/keycloak.config';
+import { KeycloakConnectConfigService } from './config/keycloak-connect.config';
 
 import { AuthModule } from './modules/auth/auth.module';
-import { BillPaymentModule } from './modules/bill-payment/bill-payment.module';
-import { AdminModule } from './modules/admin/admin.module';
-
-import { TemplatesModule } from './common/templates/templates.module';
+import { RbacModule } from './modules/rbac/rbac.module';
 import { HealthController } from './common/health/health.controller';
-
-import { InternalEventBusModule } from './internal-events/internal-event-bus.module';
-import { AuditOutboxModule } from './clients/audit-outbox/audit-outbox.module';
-
-import { KeycloakAuthGuard } from './common/guards/keycloak-auth.guard';
-import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
   imports: [
@@ -27,19 +26,23 @@ import { RolesGuard } from './common/guards/roles.guard';
       load: [appConfig, databaseConfig, keycloakConfig],
     }),
     TypeOrmModule.forRootAsync({
-      useFactory: databaseConfig,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        configService.get<DataSourceOptions>('database') as DataSourceOptions,
     }),
-    InternalEventBusModule,
-    AuditOutboxModule,
-    TemplatesModule,
+    KeycloakConnectModule.registerAsync({
+      imports: [ConfigModule],
+      useClass: KeycloakConnectConfigService,
+    }),
+    TerminusModule,
     AuthModule,
-    BillPaymentModule,
-    AdminModule,
+    RbacModule,
   ],
   controllers: [HealthController],
   providers: [
-    { provide: APP_GUARD, useClass: KeycloakAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RoleGuard },
   ],
 })
 export class AppModule {}

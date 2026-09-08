@@ -11,7 +11,19 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api/v1');
-  app.use(helmet());
+
+  const enableHttpsHeaders = process.env.ENABLE_HTTPS_HEADERS === 'true';
+  if (enableHttpsHeaders) {
+    app.use(helmet());
+  } else {
+    app.use(
+      helmet({
+        hsts: false,
+        crossOriginOpenerPolicy: false,
+        contentSecurityPolicy: false,
+      }),
+    );
+  }
   app.enableCors();
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -19,16 +31,34 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseTransformInterceptor());
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Identity / Bill-Payment / Admin Service')
-    .setDescription('OpenAPI docs for the identity-billpay-admin-service modulith')
+    .setTitle('NPST BCB — Auth Service')
+    .setDescription(
+      'Bharat Banking authentication APIs. All endpoints use POST.\n\n' +
+        '**Flow:**\n' +
+        '1. `POST /auth/login` — get accessToken\n' +
+        '2. Click **Authorize** and paste the accessToken\n' +
+        '3. Call protected endpoints\n' +
+        '4. `POST /auth/logout` — revoke refresh token when done',
+    )
     .setVersion('1.0')
-    .addBearerAuth()
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Paste the accessToken from POST /auth/login',
+      },
+      'access-token',
+    )
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/v1/docs', app, swaggerDocument);
+  SwaggerModule.setup('api/v1/docs', app, swaggerDocument, {
+    swaggerOptions: { persistAuthorization: true },
+  });
 
   const port = process.env.PORT ?? 3000;
-  await app.listen(port);
+  const host = process.env.HOST ?? '0.0.0.0';
+  await app.listen(port, host);
 }
 
 bootstrap();

@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DeviceProfile } from './entities/device-profile.entity';
+import { RegisterDeviceDto } from './dto/register-device.dto';
 
 @Injectable()
 export class DeviceService {
@@ -14,12 +15,27 @@ export class DeviceService {
     return this.repository.find();
   }
 
-  findOne(id: string) {
-    return this.repository.findOne({ where: { id } as any });
+  async findOne(id: string) {
+    const record = await this.repository.findOne({ where: { id } });
+    if (!record) {
+      throw new NotFoundException('Device profile not found');
+    }
+    return record;
   }
 
-  create(data: Partial<DeviceProfile>) {
-    const entity = this.repository.create(data);
+  create(dto: RegisterDeviceDto) {
+    const entity = this.repository.create({
+      userId: dto.userId,
+      deviceId: dto.deviceId,
+      deviceModel: dto.deviceModel,
+      trusted: false,
+    });
     return this.repository.save(entity);
+  }
+
+  async softDelete(id: string) {
+    await this.findOne(id);
+    await this.repository.softDelete(id);
+    return { id, deleted: true };
   }
 }

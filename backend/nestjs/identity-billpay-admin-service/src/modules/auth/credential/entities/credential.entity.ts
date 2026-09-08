@@ -1,28 +1,14 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
+import { SoftDeleteEntity } from '../../../../common/entities/soft-delete.entity';
 
-@Entity({ name: 'credential', schema: 'identity' })
-export class Credential {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+@Entity({ name: 'credential' })
+export class Credential extends SoftDeleteEntity {
   @Column({ name: 'user_id' })
   userId: string;
 
   @Column({ name: 'password_hash' })
   passwordHash: string;
 
-  @Column({ name: 'last_rotated_at', type: 'timestamptz', nullable: true })
-  lastRotatedAt: Date;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @Column({ name: 'last_rotated_at', type: 'timestamp', nullable: true })
+  lastRotatedAt: Date | null;
 }

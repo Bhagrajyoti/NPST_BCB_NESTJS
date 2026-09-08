@@ -1,16 +1,8 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
+import { SoftDeleteEntity } from '../../../../common/entities/soft-delete.entity';
 
-@Entity({ name: 'otp_challenge', schema: 'identity' })
-export class OtpChallenge {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+@Entity({ name: 'otp_challenge' })
+export class OtpChallenge extends SoftDeleteEntity {
   @Column({ name: 'mobile_number' })
   mobileNumber: string;
 
@@ -20,15 +12,9 @@ export class OtpChallenge {
   @Column({ name: 'attempt_count', default: 0 })
   attemptCount: number;
 
-  @Column({ name: 'locked_until', type: 'timestamptz', nullable: true })
-  lockedUntil: Date;
+  @Column({ name: 'locked_until', type: 'timestamp', nullable: true })
+  lockedUntil: Date | null;
 
-  @Column({ name: 'expires_at', type: 'timestamptz' })
+  @Column({ name: 'expires_at', type: 'timestamp' })
   expiresAt: Date;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
 }

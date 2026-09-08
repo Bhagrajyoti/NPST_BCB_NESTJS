@@ -1,0 +1,14 @@
+{
+  "name": "npst-bcb-nestjs",
+  "private": true,
+  "scripts": {
+    "install:service": "npm install --prefix backend/nestjs/identity-billpay-admin-service",
+    "docker:up": "docker-compose up -d mysql",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f mysql",
+    "migration:run": "npm run migration:run --prefix backend/nestjs/identity-billpay-admin-service",
+    "start:dev": "npm run start:dev --prefix backend/nestjs/identity-billpay-admin-service",
+    "build": "npm run build --prefix backend/nestjs/identity-billpay-admin-service",
+    "test": "npm run test --prefix backend/nestjs/identity-billpay-admin-service"
+  }
+}
