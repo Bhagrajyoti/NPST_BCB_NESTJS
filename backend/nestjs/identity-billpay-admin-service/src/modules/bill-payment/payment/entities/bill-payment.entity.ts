@@ -34,6 +34,9 @@ amount: number;
   @Column({ default: 'PENDING' })
   status: string;
 
+  @Column({ name: 'idempotency_key', unique: true })
+  idempotencyKey: string;
+
   @Column({ name: 'bbps_reference_id', nullable: true })
   bbpsReferenceId: string;
 

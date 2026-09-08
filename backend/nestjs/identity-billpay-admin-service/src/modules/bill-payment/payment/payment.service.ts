@@ -36,6 +36,38 @@ export class PaymentService {
   }
 
   async create(dto: CreatePaymentDto) {
+    
+    // 0. Idempotency check
+  const existingPayment = await this.paymentRepository.findOne({
+    where: {
+      idempotencyKey: dto.idempotencyKey,
+    },
+  });
+
+  if (existingPayment) {
+  const sameRequest =
+    existingPayment.billerCode === dto.billerCode &&
+    existingPayment.consumerNumber === dto.consumerNumber &&
+    Number(existingPayment.amount) === Number(dto.amount);
+
+  if (!sameRequest) {
+    throw new BadRequestException({
+      code: 'IDEMPOTENCY_KEY_REUSED',
+      message: 'Idempotency key is already used for a different payment',
+    });
+  }
+
+  return {
+    paymentId: existingPayment.id,
+    billerCode: existingPayment.billerCode,
+    consumerNumber: existingPayment.consumerNumber,
+    amount: existingPayment.amount,
+    status: existingPayment.status,
+    bbpsReferenceId: existingPayment.bbpsReferenceId,
+    duplicate: true,
+  };
+}
+
     // 1. Find bill
     const bill = await this.mockBillRepository.findOne({
       where: {
@@ -86,6 +118,7 @@ export class PaymentService {
       consumerNumber: bill.consumerNumber,
       amount: billAmount,
       status: bbpsResponse.status,
+      idempotencyKey: dto.idempotencyKey,
       bbpsReferenceId: bbpsResponse.referenceId,
     });
 
