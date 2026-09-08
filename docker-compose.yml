@@ -1,18 +1,21 @@
+version: '3.8'
+
 services:
-  mysql:
+  mysql-db:
     image: mysql:8.0
     container_name: npst-bcb-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: identity_billpay_admin
-      MYSQL_USER: bcb_user
-      MYSQL_PASSWORD: bcb_pass
+      MYSQL_ROOT_PASSWORD: supersecretrootpassword
+      MYSQL_MULTIPLE_DATABASES: db1,db2,db3,db4,db5,db6,db7
+      MYSQL_APP_USER: bcb_user
+      MYSQL_APP_PASSWORD: bcb_pass
     ports:
       - '0.0.0.0:3306:3306'
     volumes:
+      - ./init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-proot']
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-psupersecretrootpassword']
       interval: 5s
       timeout: 5s
       retries: 15
@@ -29,7 +32,7 @@ services:
     ports:
       - '0.0.0.0:3000:3000'
     depends_on:
-      mysql:
+      mysql-db:
         condition: service_healthy
     restart: unless-stopped
 

@@ -8,7 +8,7 @@ function buildDataSourceOptions(): DataSourceOptions {
     port: parseInt(process.env.DB_PORT ?? '3306', 10),
     username: process.env.DB_USERNAME ?? 'bcb_user',
     password: process.env.DB_PASSWORD ?? 'bcb_pass',
-    database: process.env.DB_DATABASE ?? 'identity_billpay_admin',
+    database: process.env.DB_DATABASE ?? 'db1',
     entities: [
       __dirname + '/../modules/auth/**/*.entity{.ts,.js}',
       __dirname + '/../modules/rbac/**/*.entity{.ts,.js}',
