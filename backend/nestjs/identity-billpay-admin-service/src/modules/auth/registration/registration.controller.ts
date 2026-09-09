@@ -1,21 +1,24 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'nest-keycloak-connect';
+import { adminPortalOp, mobileCustomerOp } from '../../../common/swagger/api-audience.constants';
 import { IdRequestDto } from '../../../common/dto/id-request.dto';
 import { RegistrationService } from './registration.service';
 import { InitRegistrationDto } from './dto/init-registration.dto';
 
-@ApiTags('Auth — Registration')
+@ApiTags('Mobile — Registration (Customer onboarding)', 'Auth — Registration')
 @Controller('auth/registration')
 export class RegistrationController {
   constructor(private readonly service: RegistrationService) {}
 
   @Post('list')
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'List all registration attempts',
-    description: 'Returns all active (non-deleted) registration records. Requires Bearer token.',
-  })
+  @ApiOperation(
+    adminPortalOp(
+      'List registration attempts',
+      'Returns all active customer registration records for bank staff review in the admin portal.',
+    ),
+  )
   @ApiResponse({ status: 200, description: 'List of registration attempts' })
   list() {
     return this.service.findAll();
@@ -23,10 +26,12 @@ export class RegistrationController {
 
   @Post('get')
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get registration by ID',
-    description: 'Fetches a single registration attempt by UUID.',
-  })
+  @ApiOperation(
+    adminPortalOp(
+      'Get registration attempt by ID',
+      'Fetches a single customer registration record by internal UUID for admin review.',
+    ),
+  )
   @ApiResponse({ status: 200, description: 'Registration record' })
   @ApiResponse({ status: 404, description: 'Not found' })
   get(@Body() dto: IdRequestDto) {
@@ -35,12 +40,14 @@ export class RegistrationController {
 
   @Public()
   @Post('create')
-  @ApiOperation({
-    summary: 'Start registration',
-    description:
-      'Creates a new registration attempt with step INIT. ' +
-      'Public — no token required. Called when a user begins onboarding.',
-  })
+  @ApiOperation(
+    mobileCustomerOp(
+      'Start customer registration',
+      'First step of mobile-app customer onboarding. ' +
+        'Creates a registration attempt with step INIT using the customer’s mobile number and PAN/CIF. ' +
+        'Public — no Bearer token required.',
+    ),
+  )
   @ApiResponse({ status: 201, description: 'Registration started' })
   create(@Body() dto: InitRegistrationDto) {
     return this.service.create(dto);
@@ -48,10 +55,12 @@ export class RegistrationController {
 
   @Post('delete')
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Soft-delete registration',
-    description: 'Marks the registration as deleted (sets deleted_at). Record is not removed from DB.',
-  })
+  @ApiOperation(
+    adminPortalOp(
+      'Soft-delete registration attempt',
+      'Marks a customer registration as deleted for admin cleanup. Record is retained in the database.',
+    ),
+  )
   @ApiResponse({ status: 200, description: 'Soft-deleted successfully' })
   delete(@Body() dto: IdRequestDto) {
     return this.service.softDelete(dto.id);

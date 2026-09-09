@@ -35,6 +35,7 @@ export class KeycloakConnectConfigService implements KeycloakConnectOptionsFacto
       secret,
       bearerOnly: true,
       realmPublicKey,
+      verifyTokenAudience: false,
       policyEnforcement: PolicyEnforcementMode.PERMISSIVE,
       tokenValidation,
     };

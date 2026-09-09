@@ -3,7 +3,7 @@ import { IsNotEmpty, IsString } from 'class-validator';
 
 export class InitRegistrationDto {
   @ApiProperty({
-    description: 'Mobile number of the user starting registration',
+    description: 'Customer mobile number starting registration in the mobile app',
     example: '9876543210',
   })
   @IsNotEmpty()
@@ -11,7 +11,7 @@ export class InitRegistrationDto {
   mobileNumber: string;
 
   @ApiProperty({
-    description: 'PAN or CIF number used to identify the corporate customer',
+    description: 'Customer PAN or CIF used to identify the corporate/retail customer during mobile onboarding',
     example: 'CIF12345',
   })
   @IsNotEmpty()

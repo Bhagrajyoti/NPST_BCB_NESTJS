@@ -3,9 +3,9 @@
   "private": true,
   "scripts": {
     "install:service": "npm install --prefix backend/nestjs/identity-billpay-admin-service",
-    "docker:up": "docker-compose up -d mysql",
+    "docker:up": "docker-compose up -d mysql-db",
     "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f mysql",
+    "docker:logs": "docker-compose logs -f mysql-db",
     "migration:run": "npm run migration:run --prefix backend/nestjs/identity-billpay-admin-service",
     "start:dev": "npm run start:dev --prefix backend/nestjs/identity-billpay-admin-service",
     "build": "npm run build --prefix backend/nestjs/identity-billpay-admin-service",

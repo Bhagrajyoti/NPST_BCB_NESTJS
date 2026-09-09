@@ -1,3 +1,9 @@
+import { InternalEventBusService } from '../../../internal-events/internal-event-bus.service';
+import {
+  EMPLOYEE_ACCOUNT_SYNCED_EVENT,
+  EmployeeAccountSyncedEvent,
+} from '../events/employee-account-synced.event';
+
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -21,6 +27,7 @@ export class EmployeesService {
     private readonly employeeRoles: Repository<EmployeeUserRole>,
     private readonly rolesService: RolesService,
     private readonly keycloakService: KeycloakService,
+    private readonly eventBus: InternalEventBusService,
   ) {}
 
   async create(
@@ -71,6 +78,21 @@ export class EmployeesService {
     );
 
     const roleDetails = await this.rolesService.findRoleWithPermissions(role.id);
+
+      this.eventBus.publish(
+      EMPLOYEE_ACCOUNT_SYNCED_EVENT,
+      new EmployeeAccountSyncedEvent(
+        employee.id,
+        employee.keycloakUserId,
+        employee.username,
+        employee.email,
+        employee.firstName,
+        employee.lastName,
+        role.id,
+        role.name,
+        employee.isActive,
+      ),
+    );
 
     return {
       employee: {
@@ -146,6 +168,21 @@ export class EmployeesService {
 
     const roleDetails = await this.rolesService.findRoleWithPermissions(newRole.id);
 
+    this.eventBus.publish(
+      EMPLOYEE_ACCOUNT_SYNCED_EVENT,
+      new EmployeeAccountSyncedEvent(
+        employee.id,
+        employee.keycloakUserId,
+        employee.username,
+        employee.email,
+        employee.firstName,
+        employee.lastName,
+        newRole.id,
+        newRole.name,
+        employee.isActive,
+      ),
+    );
+    
     return {
       employee: {
         id: employee.id,

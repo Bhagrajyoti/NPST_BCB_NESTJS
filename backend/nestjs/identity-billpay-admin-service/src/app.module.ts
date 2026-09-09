@@ -17,6 +17,7 @@ import { KeycloakConnectConfigService } from './config/keycloak-connect.config';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthController } from './common/health/health.controller';
 
 import { InternalEventBusModule } from './internal-events/internal-event-bus.module';
@@ -43,8 +44,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     TerminusModule,
     AuthModule,
     RbacModule,
-    BillPaymentModule,
     AdminModule,
+    BillPaymentModule,
     InternalEventBusModule,
     AuditOutboxModule,
   ],
