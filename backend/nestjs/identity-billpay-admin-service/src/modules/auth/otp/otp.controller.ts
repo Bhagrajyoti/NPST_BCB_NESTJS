@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'nest-keycloak-connect';
+import { Auth } from '../../../common/decorators/auth.decorator';
 import { IdRequestDto } from '../../../common/dto/id-request.dto';
 import { OtpService } from './otp.service';
 import { GenerateOtpDto } from './dto/generate-otp.dto';
@@ -11,14 +12,14 @@ export class OtpController {
   constructor(private readonly service: OtpService) {}
 
   @Post('list')
-  @ApiBearerAuth()
+  @Auth()
   @ApiOperation({ summary: 'List all OTP challenges' })
   list() {
     return this.service.findAll();
   }
 
   @Post('get')
-  @ApiBearerAuth()
+  @Auth()
   @ApiOperation({ summary: 'Get OTP challenge by ID' })
   get(@Body() dto: IdRequestDto) {
     return this.service.findOne(dto.id);
@@ -38,7 +39,7 @@ export class OtpController {
   }
 
   @Post('delete')
-  @ApiBearerAuth()
+  @Auth()
   @ApiOperation({ summary: 'Soft-delete OTP challenge' })
   delete(@Body() dto: IdRequestDto) {
     return this.service.softDelete(dto.id);

@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'nest-keycloak-connect';
+import { Auth } from '../../../common/decorators/auth.decorator';
 import { adminPortalOp, mobileCustomerOp } from '../../../common/swagger/api-audience.constants';
 import { IdRequestDto } from '../../../common/dto/id-request.dto';
 import { RegistrationService } from './registration.service';
@@ -12,7 +13,7 @@ export class RegistrationController {
   constructor(private readonly service: RegistrationService) {}
 
   @Post('list')
-  @ApiBearerAuth()
+  @Auth()
   @ApiOperation(
     adminPortalOp(
       'List registration attempts',
@@ -25,7 +26,7 @@ export class RegistrationController {
   }
 
   @Post('get')
-  @ApiBearerAuth()
+  @Auth()
   @ApiOperation(
     adminPortalOp(
       'Get registration attempt by ID',
@@ -54,7 +55,7 @@ export class RegistrationController {
   }
 
   @Post('delete')
-  @ApiBearerAuth()
+  @Auth()
   @ApiOperation(
     adminPortalOp(
       'Soft-delete registration attempt',

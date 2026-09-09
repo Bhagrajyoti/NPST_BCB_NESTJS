@@ -15,6 +15,14 @@ export const TEST_BANK_ADMIN = {
   realm_access: { roles: ['BANK_ADMIN'] },
 };
 
+export const TEST_NO_ROLE = {
+  sub: '33333333-3333-3333-3333-333333333333',
+  realm_access: { roles: [] as string[] },
+};
+
+export const mockBbpsAdapter = {
+  pay: jest.fn().mockResolvedValue({ status: 'SUCCESS', referenceId: 'TEST-BBPS-REF' }),
+};
 
 export const mockKeycloakService = {
   login: jest.fn().mockResolvedValue({
@@ -50,6 +58,8 @@ export async function createTestApp(
   })
     .overrideProvider(KeycloakService)
     .useValue(mockKeycloakService)
+    .overrideProvider('BBPS_ADAPTER')
+    .useValue(mockBbpsAdapter)
     .compile();
 
   const app = moduleFixture.createNestApplication();
@@ -69,6 +79,7 @@ export function authedRequest(app: INestApplication) {
   const server = supertest(app.getHttpServer());
   return {
     post: (path: string) => server.post(path).set('Authorization', 'Bearer test-access-token'),
+    get: (path: string) => server.get(path).set('Authorization', 'Bearer test-access-token'),
   };
 }
 

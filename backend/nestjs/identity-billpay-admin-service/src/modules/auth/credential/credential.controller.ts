@@ -1,13 +1,14 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from 'nest-keycloak-connect';
+import { Auth } from '../../../common/decorators/auth.decorator';
 import { adminPortalOp, mobileCustomerOp } from '../../../common/swagger/api-audience.constants';
 import { CredentialService } from './credential.service';
 import { GetCredentialDto } from './dto/get-credential.dto';
 import { SetCredentialDto } from './dto/set-credential.dto';
 
 @ApiTags('Mobile — Credential (Customer MPIN)')
-@ApiBearerAuth()
+@Auth()
 @Controller('auth/credential')
 export class CredentialController {
   constructor(private readonly service: CredentialService) {}
@@ -28,15 +29,12 @@ export class CredentialController {
     mobileCustomerOp(
       'Get customer MPIN credential',
       'Returns the logged-in customer’s MPIN metadata from the mobile app. ' +
-        'Uses the Keycloak user ID (`sub` from POST /auth/session/me). ' +
+        'Uses the Keycloak user ID (`sub` from POST /auth/me). ' +
         'If `userId` is omitted, the authenticated Bearer token user is used.',
     ),
   )
   @ApiResponse({ status: 404, description: 'No MPIN credential exists for this customer' })
-  get(
-    @Body() dto: GetCredentialDto,
-    @AuthenticatedUser() user: Record<string, unknown>,
-  ) {
+  get(@Body() dto: GetCredentialDto, @AuthenticatedUser() user: Record<string, unknown>) {
     return this.service.resolveGet(dto, user?.sub as string | undefined);
   }
 
@@ -47,7 +45,7 @@ export class CredentialController {
       'Primary mobile-app onboarding endpoint. ' +
         '**MPIN** is hashed and stored locally for banking transactions in the mobile app. ' +
         '**Password** (optional) is written to Keycloak only. ' +
-        'Use the customer’s Keycloak user ID (`sub` from session/me) as `userId`.',
+        'Use the customer’s Keycloak user ID (`sub` from POST /auth/me) as `userId`.',
     ),
   )
   create(@Body() dto: SetCredentialDto) {

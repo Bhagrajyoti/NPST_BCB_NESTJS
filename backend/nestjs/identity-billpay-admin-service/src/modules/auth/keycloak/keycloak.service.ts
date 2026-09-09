@@ -3,9 +3,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { LoginDto } from '../session/dto/login.dto';
-import { LogoutDto } from '../session/dto/logout.dto';
-import { TokenResponseDto } from '../session/dto/token-response.dto';
+import { LoginDto } from '../token/dto/login.dto';
+import { LogoutDto } from '../token/dto/logout.dto';
+import { TokenResponseDto } from '../token/dto/token-response.dto';
 
 interface KeycloakTokenResponse {
   access_token: string;

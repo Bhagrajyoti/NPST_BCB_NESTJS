@@ -13,7 +13,7 @@ import { DeviceController } from './device/device.controller';
 import { DeviceService } from './device/device.service';
 import { DeviceProfile } from './device/entities/device-profile.entity';
 import { CorporateHierarchyController } from './corporate-hierarchy/corporate-hierarchy.controller';
-import { SessionController } from './session/session.controller';
+import { AuthController } from './token/auth.controller';
 import { CorporateHierarchyService } from './corporate-hierarchy/corporate-hierarchy.service';
 import { CorporateHierarchy } from './corporate-hierarchy/entities/corporate-hierarchy.entity';
 import { OtpController } from './otp/otp.controller';
@@ -38,7 +38,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
     DeviceController,
     CorporateHierarchyController,
     OtpController,
-    SessionController,
+    AuthController,
   ],
   providers: [
     RegistrationService,

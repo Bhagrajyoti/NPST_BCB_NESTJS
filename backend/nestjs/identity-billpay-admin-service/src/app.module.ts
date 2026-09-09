@@ -18,6 +18,7 @@ import { KeycloakConnectConfigService } from './config/keycloak-connect.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { BillPaymentModule } from './modules/bill-payment/bill-payment.module';
 import { HealthController } from './common/health/health.controller';
 
 import { InternalEventBusModule } from './internal-events/internal-event-bus.module';

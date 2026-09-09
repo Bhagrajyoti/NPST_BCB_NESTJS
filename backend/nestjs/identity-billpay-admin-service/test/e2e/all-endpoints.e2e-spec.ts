@@ -1,11 +1,19 @@
 import { INestApplication } from '@nestjs/common';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
+import { Repository } from 'typeorm';
 import {
   authedRequest,
   createTestApp,
+  mockBbpsAdapter,
   mockKeycloakService,
   publicRequest,
+  TEST_BANK_ADMIN,
+  TEST_NO_ROLE,
 } from './helpers/test-app';
+import { AdminUser } from '../../src/modules/admin/admin-user/entities/admin-user.entity';
+import { BillerRegistration } from '../../src/modules/bill-payment/biller/entities/biller-registration.entity';
+import { MockBill } from '../../src/modules/bill-payment/bill/entities/mock-bill.entity';
 
 describe('All API endpoints (e2e)', () => {
   let app: INestApplication;
@@ -29,7 +37,7 @@ describe('All API endpoints (e2e)', () => {
     });
   });
 
-  describe('Auth — Session', () => {
+  describe('Auth', () => {
     it('POST /api/v1/auth/login', async () => {
       const res = await publicRequest(app)
         .post('/api/v1/auth/login')
@@ -40,15 +48,15 @@ describe('All API endpoints (e2e)', () => {
     });
 
     it('POST /api/v1/auth/logout', async () => {
-      const res = await publicRequest(app)
+      const res = await authedRequest(app)
         .post('/api/v1/auth/logout')
         .send({ refreshToken: 'test-refresh-token', clientId: 'admin-web' })
         .expect(201);
       expect(res.body.loggedOut).toBe(true);
     });
 
-    it('POST /api/v1/auth/session/me', async () => {
-      const res = await authedRequest(app).post('/api/v1/auth/session/me').expect(201);
+    it('POST /api/v1/auth/me', async () => {
+      const res = await authedRequest(app).post('/api/v1/auth/me').expect(201);
       expect(res.body.user).toBeDefined();
     });
   });
@@ -496,6 +504,376 @@ describe('All API endpoints (e2e)', () => {
         .expect(201);
       expect(res.body).toHaveProperty('count');
       expect(res.body).toHaveProperty('users');
+    });
+  });
+
+  describe('Admin — Admin Users', () => {
+    let adminUserRepo: Repository<AdminUser>;
+    let seededId: string;
+
+    beforeAll(async () => {
+      adminUserRepo = app.get(getRepositoryToken(AdminUser));
+      const suffix = Date.now();
+      const saved = await adminUserRepo.save(
+        adminUserRepo.create({
+          employeeId: randomUUID(),
+          keycloakUserId: randomUUID(),
+          username: `admin.user.${suffix}`,
+          email: `admin.user.${suffix}@test.example.com`,
+          firstName: 'Admin',
+          lastName: 'User',
+          roleId: randomUUID(),
+          roleName: 'BANK_ADMIN',
+          isActive: true,
+          lastSyncedAt: new Date(),
+        }),
+      );
+      seededId = saved.id;
+    });
+
+    it('POST /api/v1/admin/admin-user/list', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/admin-user/list')
+        .send({})
+        .expect(201);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.some((u: { id: string }) => u.id === seededId)).toBe(true);
+    });
+
+    it('POST /api/v1/admin/admin-user/get', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/admin-user/get')
+        .send({ id: seededId })
+        .expect(201);
+      expect(res.body.id).toBe(seededId);
+    });
+
+    it('POST /api/v1/admin/admin-user/get returns 404 for an unknown id', async () => {
+      await authedRequest(app)
+        .post('/api/v1/admin/admin-user/get')
+        .send({ id: randomUUID() })
+        .expect(404);
+    });
+
+    it('rejects a caller with no admin-portal role', async () => {
+      const noRoleApp = await createTestApp(TEST_NO_ROLE);
+      await authedRequest(noRoleApp).post('/api/v1/admin/admin-user/list').send({}).expect(403);
+      await noRoleApp.close();
+    });
+  });
+
+  describe('Admin — Authorization Rules', () => {
+    let ruleId: string;
+
+    it('POST /api/v1/admin/authorization-rules/create', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/create')
+        .send({
+          ruleName: 'High-value transfer approval',
+          cif: `CIF-${Date.now()}`,
+          threshold: '500000.00',
+        })
+        .expect(201);
+      expect(res.body.version).toBe(1);
+      ruleId = res.body.id;
+    });
+
+    it('POST /api/v1/admin/authorization-rules/list', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/list')
+        .expect(201);
+      expect(res.body.some((r: { id: string }) => r.id === ruleId)).toBe(true);
+    });
+
+    it('POST /api/v1/admin/authorization-rules/get', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/get')
+        .send({ id: ruleId })
+        .expect(201);
+      expect(res.body.id).toBe(ruleId);
+    });
+
+    it('POST /api/v1/admin/authorization-rules/update', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/update')
+        .send({ id: ruleId, threshold: '750000.00', changeReason: 'Policy update' })
+        .expect(201);
+      expect(res.body.version).toBe(2);
+    });
+
+    it('POST /api/v1/admin/authorization-rules/history', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/history')
+        .send({ id: ruleId })
+        .expect(201);
+      expect(res.body.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('rejects BANK_ADMIN from creating a rule (superadmin-only)', async () => {
+      const bankAdminApp = await createTestApp(TEST_BANK_ADMIN);
+      await authedRequest(bankAdminApp)
+        .post('/api/v1/admin/authorization-rules/create')
+        .send({ ruleName: 'Should be rejected', cif: `CIF-${Date.now()}`, threshold: '1000.00' })
+        .expect(403);
+      await bankAdminApp.close();
+    });
+
+    it('allows BANK_ADMIN read-only access', async () => {
+      const bankAdminApp = await createTestApp(TEST_BANK_ADMIN);
+      await authedRequest(bankAdminApp).post('/api/v1/admin/authorization-rules/list').expect(201);
+      await bankAdminApp.close();
+    });
+
+    it('rejects a caller with no admin-portal role', async () => {
+      const noRoleApp = await createTestApp(TEST_NO_ROLE);
+      await authedRequest(noRoleApp).post('/api/v1/admin/authorization-rules/list').expect(403);
+      await noRoleApp.close();
+    });
+
+    it('POST /api/v1/admin/authorization-rules/deactivate', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/deactivate')
+        .send({ id: ruleId })
+        .expect(201);
+      expect(res.body.deactivated).toBe(true);
+
+      await authedRequest(app)
+        .post('/api/v1/admin/authorization-rules/get')
+        .send({ id: ruleId })
+        .expect(404);
+    });
+  });
+
+  describe('Admin — Reporting', () => {
+    it('GET /api/v1/admin/reporting', async () => {
+      const res = await authedRequest(app).get('/api/v1/admin/reporting').expect(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
+
+  describe('Bill Payment — Biller', () => {
+    let billerId: string;
+    const billerCode = `BILLER-${Date.now()}`;
+
+    it('POST /api/v1/bill-payment/biller', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/bill-payment/biller')
+        .send({ billerCode, billerName: 'Test Electricity Board', category: 'ELECTRICITY' })
+        .expect(201);
+      expect(res.body.billerCode).toBe(billerCode);
+      billerId = res.body.id;
+    });
+
+    it('GET /api/v1/bill-payment/biller', async () => {
+      const res = await authedRequest(app).get('/api/v1/bill-payment/biller').expect(200);
+      expect(res.body.some((b: { id: string }) => b.id === billerId)).toBe(true);
+    });
+
+    it('GET /api/v1/bill-payment/biller/:id', async () => {
+      const res = await authedRequest(app)
+        .get(`/api/v1/bill-payment/biller/${billerId}`)
+        .expect(200);
+      expect(res.body.id).toBe(billerId);
+    });
+  });
+
+  describe('Bill Payment — Bill', () => {
+    let billerRepo: Repository<BillerRegistration>;
+    let mockBillRepo: Repository<MockBill>;
+    const billerCode = `BILL-FETCH-${Date.now()}`;
+    const consumerNumber = '123456789012';
+    const registeredMobile = '9876543210';
+
+    beforeAll(async () => {
+      billerRepo = app.get(getRepositoryToken(BillerRegistration));
+      mockBillRepo = app.get(getRepositoryToken(MockBill));
+
+      await billerRepo.save(
+        billerRepo.create({
+          billerCode,
+          billerName: 'Test Water Board',
+          category: 'WATER',
+          active: true,
+        }),
+      );
+      await mockBillRepo.save(
+        mockBillRepo.create({
+          billerCode,
+          consumerNumber,
+          billNumber: `BILL-NO-${Date.now()}`,
+          registeredMobile,
+          customerName: 'Test Customer',
+          amount: 1500.5,
+          dueDate: '2026-12-31',
+          status: 'UNPAID',
+        }),
+      );
+    });
+
+    it('POST /api/v1/bill-payment/bill/fetch', async () => {
+      const res = await authedRequest(app)
+        .post('/api/v1/bill-payment/bill/fetch')
+        .send({ billerCode, consumerNumber, registeredMobile })
+        .expect(201);
+      expect(Number(res.body.amount)).toBe(1500.5);
+      expect(res.body.status).toBe('UNPAID');
+    });
+
+    it('POST /api/v1/bill-payment/bill/fetch returns 404 for an unknown bill', async () => {
+      await authedRequest(app)
+        .post('/api/v1/bill-payment/bill/fetch')
+        .send({ billerCode, consumerNumber: '999999999999', registeredMobile })
+        .expect(404);
+    });
+
+    it('POST /api/v1/bill-payment/bill/fetch returns 404 for an unknown biller', async () => {
+      await authedRequest(app)
+        .post('/api/v1/bill-payment/bill/fetch')
+        .send({ billerCode: 'NON_EXISTENT_BILLER', consumerNumber, registeredMobile })
+        .expect(404);
+    });
+  });
+
+  describe('Bill Payment — Payment', () => {
+    let billerRepo: Repository<BillerRegistration>;
+    let mockBillRepo: Repository<MockBill>;
+
+    beforeAll(() => {
+      billerRepo = app.get(getRepositoryToken(BillerRegistration));
+      mockBillRepo = app.get(getRepositoryToken(MockBill));
+    });
+
+    beforeEach(() => {
+      mockBbpsAdapter.pay.mockClear();
+    });
+
+    async function seedBill(prefix: string, amount: number) {
+      const billerCode = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const consumerNumber = String(Math.floor(1e11 + Math.random() * 8e11));
+      await billerRepo.save(
+        billerRepo.create({
+          billerCode,
+          billerName: 'Test Gas Board',
+          category: 'GAS',
+          active: true,
+        }),
+      );
+      await mockBillRepo.save(
+        mockBillRepo.create({
+          billerCode,
+          consumerNumber,
+          billNumber: `BILL-NO-${Date.now()}`,
+          registeredMobile: '9876500000',
+          customerName: 'Payment Test Customer',
+          amount,
+          dueDate: '2026-12-31',
+          status: 'UNPAID',
+        }),
+      );
+      return { billerCode, consumerNumber };
+    }
+
+    let paymentId: string;
+    let listedBillerCode: string;
+
+    it('POST /api/v1/bill-payment/payment succeeds and marks the bill PAID', async () => {
+      const { billerCode, consumerNumber } = await seedBill('PAY-OK', 2000);
+      listedBillerCode = billerCode;
+      mockBbpsAdapter.pay.mockResolvedValueOnce({
+        status: 'SUCCESS',
+        referenceId: 'TEST-BBPS-REF-1',
+      });
+
+      const res = await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send({
+          billerCode,
+          consumerNumber,
+          amount: '2000.00',
+          idempotencyKey: `idem-success-${Date.now()}`,
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe('SUCCESS');
+      expect(res.body.bbpsReferenceId).toBe('TEST-BBPS-REF-1');
+      expect(mockBbpsAdapter.pay).toHaveBeenCalledTimes(1);
+      paymentId = res.body.paymentId;
+
+      const bill = await mockBillRepo.findOne({ where: { billerCode, consumerNumber } });
+      expect(bill?.status).toBe('PAID');
+    });
+
+    it('POST /api/v1/bill-payment/payment rejects an amount mismatch', async () => {
+      const { billerCode, consumerNumber } = await seedBill('PAY-MISMATCH', 2000);
+      await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send({
+          billerCode,
+          consumerNumber,
+          amount: '1.00',
+          idempotencyKey: `idem-mismatch-${Date.now()}`,
+        })
+        .expect(400);
+    });
+
+    it('POST /api/v1/bill-payment/payment returns 404 for an unmatched bill', async () => {
+      await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send({
+          billerCode: 'NON_EXISTENT_BILLER',
+          consumerNumber: '000000000000',
+          amount: '10.00',
+          idempotencyKey: `idem-missing-${Date.now()}`,
+        })
+        .expect(404);
+    });
+
+    it('POST /api/v1/bill-payment/payment replays an idempotent request without re-calling BBPS', async () => {
+      const { billerCode, consumerNumber } = await seedBill('PAY-IDEM', 500);
+      const idempotencyKey = `idem-replay-${Date.now()}`;
+      const body = { billerCode, consumerNumber, amount: '500.00', idempotencyKey };
+
+      const first = await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send(body)
+        .expect(201);
+      expect(first.body.duplicate).toBeFalsy();
+
+      const second = await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send(body)
+        .expect(201);
+      expect(second.body.duplicate).toBe(true);
+      expect(second.body.paymentId).toBe(first.body.paymentId);
+      expect(mockBbpsAdapter.pay).toHaveBeenCalledTimes(1);
+    });
+
+    it('POST /api/v1/bill-payment/payment rejects a reused idempotency key for a different payment', async () => {
+      const { billerCode, consumerNumber } = await seedBill('PAY-REUSE', 300);
+      const idempotencyKey = `idem-reuse-${Date.now()}`;
+
+      await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send({ billerCode, consumerNumber, amount: '300.00', idempotencyKey })
+        .expect(201);
+
+      await authedRequest(app)
+        .post('/api/v1/bill-payment/payment')
+        .send({ billerCode, consumerNumber, amount: '999.00', idempotencyKey })
+        .expect(400);
+    });
+
+    it('GET /api/v1/bill-payment/payment', async () => {
+      const res = await authedRequest(app).get('/api/v1/bill-payment/payment').expect(200);
+      expect(res.body.some((p: { id: string }) => p.id === paymentId)).toBe(true);
+    });
+
+    it('GET /api/v1/bill-payment/payment/:id', async () => {
+      const res = await authedRequest(app)
+        .get(`/api/v1/bill-payment/payment/${paymentId}`)
+        .expect(200);
+      expect(res.body.id).toBe(paymentId);
+      expect(res.body.billerCode).toBe(listedBillerCode);
     });
   });
 });

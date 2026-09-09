@@ -4,7 +4,7 @@ import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength, Validat
 export class SetCredentialDto {
   @ApiProperty({
     description:
-      'Keycloak user ID of the **customer** (`sub` from POST /auth/session/me on mobile app)',
+      'Keycloak user ID of the **customer** (`sub` from POST /auth/me on mobile app)',
     example: '334b032c-7468-47fa-82a3-8204b80913a2',
   })
   @IsNotEmpty()

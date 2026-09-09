@@ -1,19 +1,21 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser, Public } from 'nest-keycloak-connect';
+import { Auth } from '../../../common/decorators/auth.decorator';
 import { KeycloakService } from '../keycloak/keycloak.service';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 
-@ApiTags('Auth — Session')
+/**
+ * This service holds no server-side session state — every route here is a thin,
+ * stateless wrapper over Keycloak's OpenID Connect token endpoint. Authentication
+ * is fully delegated to the Keycloak-issued bearer token, validated per-request
+ * by the global AuthGuard (see KeycloakConnectConfigService).
+ */
+@ApiTags('Auth')
 @Controller('auth')
-export class SessionController {
+export class AuthController {
   constructor(private readonly keycloakService: KeycloakService) {}
 
   @Public()
@@ -30,13 +32,13 @@ export class SessionController {
     return this.keycloakService.login(dto);
   }
 
-  @Public()
   @Post('logout')
+  @Auth()
   @ApiOperation({
     summary: 'Logout',
     description:
       'Ends the Keycloak session by revoking the refresh token returned from login. ' +
-      'Pass the same clientId used during login.',
+      'Pass the same clientId used during login. Requires a valid Bearer access token.',
   })
   @ApiResponse({ status: 200, description: 'Logout successful' })
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
@@ -44,8 +46,8 @@ export class SessionController {
     return this.keycloakService.logout(dto);
   }
 
-  @Post('session/me')
-  @ApiBearerAuth()
+  @Post('me')
+  @Auth()
   @ApiOperation({
     summary: 'Current user profile',
     description:
@@ -54,7 +56,10 @@ export class SessionController {
   })
   @ApiResponse({ status: 200, description: 'User claims from JWT' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  me(@AuthenticatedUser() user: Record<string, unknown>, @Req() req: { user?: Record<string, unknown> }) {
+  me(
+    @AuthenticatedUser() user: Record<string, unknown>,
+    @Req() req: { user?: Record<string, unknown> },
+  ) {
     return {
       user: user ?? req.user ?? null,
     };
