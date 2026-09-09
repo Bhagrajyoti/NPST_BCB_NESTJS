@@ -20,6 +20,11 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { HealthController } from './common/health/health.controller';
 
+import { InternalEventBusModule } from './internal-events/internal-event-bus.module';
+import { AuditOutboxModule } from './clients/audit-outbox/audit-outbox.module';
+import { KeycloakAuthGuard } from './common/guards/keycloak-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -40,6 +45,9 @@ import { HealthController } from './common/health/health.controller';
     AuthModule,
     RbacModule,
     AdminModule,
+    BillPaymentModule,
+    InternalEventBusModule,
+    AuditOutboxModule,
   ],
   controllers: [HealthController],
   providers: [

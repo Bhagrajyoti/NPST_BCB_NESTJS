@@ -20,7 +20,7 @@ export class BillSchedule {
   @Column()
   frequency: string;
 
-  @Column({ name: 'next_run_at', type: 'timestamptz' })
+  @Column({ name: 'next_run_at', type: 'datetime' })
   nextRunAt: Date;
 
   @Column({ default: true })

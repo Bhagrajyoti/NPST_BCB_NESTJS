@@ -4,10 +4,12 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 
-@Entity({ name: 'bill_payment' })
-export class BillPayment {
+@Entity({ name: 'mock_bill' })
+@Unique(['billerCode', 'consumerNumber'])
+export class MockBill {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -17,28 +19,27 @@ export class BillPayment {
   @Column({ name: 'consumer_number' })
   consumerNumber: string;
 
+  @Column({ name: 'bill_number' })
+  billNumber: string;
+
+  @Column({ name: 'registered_mobile' })
+  registeredMobile: string;
+
+  @Column({ name: 'customer_name' })
+  customerName: string;
+
   @Column({
     type: 'decimal',
     precision: 12,
     scale: 2,
   })
+  amount: number;
 
-  @Column({
-  type: 'decimal',
-  precision: 12,
-  scale: 2,
-})
+  @Column({ name: 'due_date', type: 'date' })
+  dueDate: string;
 
-amount: number;
-
-  @Column({ default: 'PENDING' })
+  @Column({ default: 'UNPAID' })
   status: string;
-
-  @Column({ name: 'idempotency_key', unique: true })
-  idempotencyKey: string;
-
-  @Column({ name: 'bbps_reference_id', nullable: true })
-  bbpsReferenceId: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

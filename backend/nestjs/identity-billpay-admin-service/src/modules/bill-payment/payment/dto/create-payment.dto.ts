@@ -12,4 +12,8 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   @IsString()
   amount: string;
+
+  @IsNotEmpty()
+  @IsString()
+  idempotencyKey: string;
 }
