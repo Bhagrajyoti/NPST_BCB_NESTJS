@@ -2,8 +2,7 @@ import { registerAs } from '@nestjs/config';
 
 export default registerAs('app', () => ({
   port: parseInt(process.env.PORT ?? '3000', 10),
-  globalPrefix: process.env.API_GLOBAL_PREFIX ?? 'identity/api/v1',
-  publicBaseUrl: process.env.APP_PUBLIC_BASE_URL,
+  globalPrefix: process.env.API_GLOBAL_PREFIX ?? 'api/v1',
   env: process.env.NODE_ENV ?? 'development',
   // When 'true', auth is served by a fixed set of fake users (see mock-users.const.ts)
   // instead of the real Keycloak server — see .env.example for details.
