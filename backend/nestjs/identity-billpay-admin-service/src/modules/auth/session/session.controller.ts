@@ -55,6 +55,9 @@ export class SessionController {
   @ApiResponse({ status: 200, description: 'User claims from JWT' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   me(@AuthenticatedUser() user: Record<string, unknown>, @Req() req: { user?: Record<string, unknown> }) {
+    console.log (
+      user
+    )
     return {
       user: user ?? req.user ?? null,
     };

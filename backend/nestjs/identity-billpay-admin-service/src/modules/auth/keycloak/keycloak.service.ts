@@ -153,13 +153,22 @@ export class KeycloakService {
     description?: string;
   }): Promise<{ id: string; name: string }> {
     const token = await this.getAdminAccessToken();
-    await firstValueFrom(
+    const createResponse = await firstValueFrom(
       this.httpService.post(
         `${this.adminBaseUrl()}/roles`,
         { name: payload.name, description: payload.description ?? '' },
-        { headers: this.adminHeaders(token) },
+        { headers: this.adminHeaders(token), validateStatus: (s) => s < 500 },
       ),
     );
+
+    // 409 means the realm role already exists (e.g. pre-seeded in Keycloak) —
+    // that's fine, we just want its id, not a duplicate.
+    if (createResponse.status >= 400 && createResponse.status !== 409) {
+      const message =
+        (createResponse.data as { errorMessage?: string })?.errorMessage ??
+        'Keycloak role creation failed';
+      throw new UnauthorizedException(message);
+    }
 
     const { data } = await firstValueFrom(
       this.httpService.get<{ id: string; name: string }>(
