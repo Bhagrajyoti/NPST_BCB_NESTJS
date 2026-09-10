@@ -69,16 +69,18 @@ Two Keycloak clients exist — pass the right one as `clientId` on login/logout:
 ```json
 {
   "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ3SHJhV3R2Tkd3dk5f...",
-  "expiresIn": 300,
+  "expiresIn": 900,
   "refreshExpiresIn": 1800,
   "refreshToken": "eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIxZTQ5OTdiNC03YmYy...",
   "tokenType": "Bearer",
   "scope": "email profile"
 }
 ```
-`expiresIn: 300` — the token is only valid for **5 minutes**; re-login (or use `refreshToken`
-against Keycloak directly — this service doesn't expose a `/auth/refresh` endpoint) if a longer
-test session is needed. `refreshToken` itself is valid for `refreshExpiresIn: 1800` (30 minutes).
+`expiresIn: 900` — the token is valid for **15 minutes** (`access.token.lifespan` set on the
+`admin-web`/`mobile-app` Keycloak clients — the realm default is still 5 minutes for any other
+client); re-login (or use `refreshToken` against Keycloak directly — this service doesn't expose
+a `/auth/refresh` endpoint) once it expires. `refreshToken` itself is valid for
+`refreshExpiresIn: 1800` (30 minutes).
 
 **What to use, and where:** `accessToken` → `Authorization: Bearer <accessToken>` on every
 protected call below. `refreshToken` → body of `POST /auth/logout`.
