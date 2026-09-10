@@ -15,7 +15,8 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix('api/v1');
+  const globalPrefix = process.env.API_GLOBAL_PREFIX ?? 'identity/api/v1';
+  app.setGlobalPrefix(globalPrefix);
 
   const enableHttpsHeaders = process.env.ENABLE_HTTPS_HEADERS === 'true';
   if (enableHttpsHeaders) {
@@ -36,32 +37,35 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseTransformInterceptor());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('NPST BCB — Auth Service')
-    .setDescription(
-      'Bharat Banking authentication APIs. All endpoints use POST.\n\n' +
-        '**Audiences:**\n' +
-        '- `[Mobile / Customer]` — mobile app endpoints for retail/corporate customers (use Keycloak client `mobile-app`)\n' +
-        '- `[Admin]` — admin web portal for bank staff (use Keycloak client `admin-web`)\n\n' +
-        '**Auth flow:**\n' +
-        '1. `POST /auth/login` — copy **`accessToken`** (not `refreshToken`)\n' +
-        '2. Click **Authorize** and paste the token only (no `Bearer` prefix)\n' +
-        '3. Call protected endpoints within 5 minutes\n' +
-        '4. `POST /auth/logout` when done',
-    )
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
+  const swaggerBuilder = new DocumentBuilder().setTitle('NPST BCB — Auth Service');
+  if (process.env.APP_PUBLIC_BASE_URL) {
+    swaggerBuilder.addServer(process.env.APP_PUBLIC_BASE_URL);
+  }
+  const swaggerDocument = SwaggerModule.createDocument(
+    app,
+    swaggerBuilder
+      .setDescription(
+        'Bharat Banking authentication APIs. All endpoints use POST.\n\n' +
+          '**Audiences:**\n' +
+          '- `[Mobile / Customer]` — mobile app endpoints for retail/corporate customers (use Keycloak client `mobile-app`)\n' +
+          '- `[Admin]` — admin web portal for bank staff (use Keycloak client `admin-web`)\n\n' +
+          '**Auth flow:**\n' +
+          '1. `POST /auth/login` — copy **`accessToken`** (not `refreshToken`)\n' +
+          '2. Click **Authorize** and paste the token only (no `Bearer` prefix)\n' +
+          '3. Call protected endpoints within 5 minutes\n' +
+          '4. `POST /auth/logout` when done',
+      )
+      .setVersion('1.0')
+      .addBearerAuth({
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
         description:
           'Paste **accessToken** from POST /auth/login only. Do not paste refreshToken or the word Bearer.',
-      },
-    )
-    .build();
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/v1/docs', app, swaggerDocument, {
+      })
+      .build(),
+  );
+  SwaggerModule.setup(`${globalPrefix}/docs`, app, swaggerDocument, {
     swaggerOptions: { persistAuthorization: true },
   });
 
