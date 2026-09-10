@@ -24,12 +24,18 @@ http://localhost:3000/api/v1/admin
 Swagger: `http://localhost:3000/api/v1/docs`
 
 Every route requires `Authorization: Bearer <accessToken>` — no public routes in this module.
-Real, working local values (`AUTH_MOCK_MODE=true`, see [mock-testing-guide.md](mock-testing-guide.md)):
+Get `<accessToken>` from `POST /auth/login` against the **real** Keycloak server
+(`AUTH_MOCK_MODE=false` — see [api endpoint guide.md §3](api%20endpoint%20guide.md#3-token-api)).
+Real accounts verified live for this guide:
 
-| Role needed | Login with | Header |
-|---|---|---|
-| `BANK_SUPER_ADMIN` | `{"username":"mock-superadmin","password":"Mock@123"}` | `Authorization: Bearer mock-mock-superadmin-token` |
-| `BANK_ADMIN` | `{"username":"mock-admin","password":"Mock@123"}` | `Authorization: Bearer mock-mock-admin-token` |
+| Role needed | Login with |
+|---|---|
+| `BANK_SUPER_ADMIN` | `{"username":"test-bank-superadmin","password":"TestFix@123","clientId":"admin-web"}` |
+| `BANK_ADMIN` (view-only) | `{"username":"docs-bank-admin","password":"DocsAdmin@123","clientId":"admin-web"}` |
+
+(`docs-bank-admin` was created for this guide via the Keycloak Admin API, holding only the
+`BANK_ADMIN` realm role — see [rbacservice.md §5](rbacservice.md#5-employees-api) for how a real
+`BANK_ADMIN`-level employee would normally be provisioned instead.)
 
 Every success response is wrapped `{ "success": true, "data": {...}, "timestamp": "..." }` — the
 JSON blocks below show `data`. Errors are unwrapped: `{ "statusCode", "path", "timestamp", "message" }`.
@@ -114,7 +120,7 @@ append a row to `authorization_rule_history` (§8), so nothing is silently overw
 ### Request
 ```json
 {
-  "ruleName": "High-value transfer approval",
+  "ruleName": "Real login test rule",
   "cif": "CIF12345",
   "threshold": "500000.00"
 }
@@ -123,18 +129,20 @@ append a row to `authorization_rule_history` (§8), so nothing is silently overw
 ### Success Response
 ```json
 {
-  "ruleName": "High-value transfer approval",
+  "ruleName": "Real login test rule",
   "cif": "CIF12345",
   "threshold": "500000.00",
   "version": 1,
-  "createdByKeycloakUserId": "00000000-0000-0000-0000-000000000001",
+  "createdByKeycloakUserId": "584d3715-75be-4af0-a211-774d0b6b1e89",
   "updatedByKeycloakUserId": null,
-  "id": "0dcf2aad-c40c-47db-ad51-2f16278436e8",
-  "createdAt": "2026-09-09T23:59:17.107Z",
-  "updatedAt": "2026-09-09T23:59:17.107Z",
+  "id": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263",
+  "createdAt": "2026-09-10T00:45:25.136Z",
+  "updatedAt": "2026-09-10T00:45:25.136Z",
   "deletedAt": null
 }
 ```
+(`createdByKeycloakUserId` is `test-bank-superadmin`'s own `sub` — the caller's identity from the
+Bearer token, not something you send.)
 
 **Auth:** `BANK_SUPER_ADMIN` only — a `BANK_ADMIN` token gets `403` here (verified: see §9).
 
@@ -153,22 +161,22 @@ rule.
 
 ### Request
 ```json
-{ "id": "0dcf2aad-c40c-47db-ad51-2f16278436e8", "threshold": "750000.00", "changeReason": "Policy update" }
+{ "id": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263", "threshold": "750000.00", "changeReason": "Policy update" }
 ```
 
 ### Success Response
 ```json
 {
-  "id": "0dcf2aad-c40c-47db-ad51-2f16278436e8",
-  "createdAt": "2026-09-09T23:59:17.107Z",
-  "updatedAt": "2026-09-09T23:59:24.000Z",
+  "id": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263",
+  "createdAt": "2026-09-10T00:45:25.136Z",
+  "updatedAt": "2026-09-10T00:48:08.000Z",
   "deletedAt": null,
-  "ruleName": "High-value transfer approval",
+  "ruleName": "Real login test rule",
   "cif": "CIF12345",
   "threshold": "750000.00",
   "version": 2,
-  "createdByKeycloakUserId": "00000000-0000-0000-0000-000000000001",
-  "updatedByKeycloakUserId": "00000000-0000-0000-0000-000000000001"
+  "createdByKeycloakUserId": "584d3715-75be-4af0-a211-774d0b6b1e89",
+  "updatedByKeycloakUserId": "584d3715-75be-4af0-a211-774d0b6b1e89"
 }
 ```
 `version` increments by exactly 1 on every update — compare against your cached value to confirm
@@ -186,27 +194,27 @@ the write landed.
 
 ### Request
 ```json
-{ "id": "0dcf2aad-c40c-47db-ad51-2f16278436e8" }
+{ "id": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263" }
 ```
 
 ### Success Response
 ```json
 [
   {
-    "id": "5000743f-0c3d-487b-9e7d-f144365939d8",
-    "ruleId": "0dcf2aad-c40c-47db-ad51-2f16278436e8",
-    "snapshot": { "cif": "CIF12345", "ruleName": "High-value transfer approval", "threshold": "750000.00", "changeReason": "Policy update" },
+    "id": "1a1e1d53-e754-4108-804f-2399d0d601ce",
+    "ruleId": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263",
+    "snapshot": { "cif": "CIF12345", "ruleName": "Real login test rule", "threshold": "750000.00", "changeReason": "Policy update" },
     "version": 2,
-    "changedByKeycloakUserId": "00000000-0000-0000-0000-000000000001",
-    "createdAt": "2026-09-09T23:59:24.911Z"
+    "changedByKeycloakUserId": "584d3715-75be-4af0-a211-774d0b6b1e89",
+    "createdAt": "2026-09-10T00:48:08.320Z"
   },
   {
-    "id": "f2cc1a81-bb03-4746-aeb7-db2341c9b680",
-    "ruleId": "0dcf2aad-c40c-47db-ad51-2f16278436e8",
-    "snapshot": { "cif": "CIF12345", "ruleName": "High-value transfer approval", "threshold": "500000.00" },
+    "id": "e1e14e72-2bd8-4f1a-ac0e-51d7f48c00b2",
+    "ruleId": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263",
+    "snapshot": { "cif": "CIF12345", "ruleName": "Real login test rule", "threshold": "500000.00" },
     "version": 1,
-    "changedByKeycloakUserId": "00000000-0000-0000-0000-000000000001",
-    "createdAt": "2026-09-09T23:59:17.118Z"
+    "changedByKeycloakUserId": "584d3715-75be-4af0-a211-774d0b6b1e89",
+    "createdAt": "2026-09-10T00:45:25.154Z"
   }
 ]
 ```
@@ -220,12 +228,12 @@ needed. The `deactivate` history row (below) additionally has `snapshot.deactiva
 
 ### Request
 ```json
-{ "id": "0dcf2aad-c40c-47db-ad51-2f16278436e8" }
+{ "id": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263" }
 ```
 
 ### Success Response
 ```json
-{ "id": "0dcf2aad-c40c-47db-ad51-2f16278436e8", "deactivated": true }
+{ "id": "bd71b111-1cf3-47e0-9e98-ae9afe7dc263", "deactivated": true }
 ```
 Soft-deletes the rule (`deletedAt` set) — it drops out of `list`/`get` (`404` afterwards on
 `get`), but the row and its full `history` are retained.
@@ -329,10 +337,10 @@ pipeline.
 | Scenario | Expected Result | Verified |
 |---|---|---|
 | `BANK_SUPER_ADMIN` creates a rule | `201`, `version: 1` | ✅ live |
-| `BANK_ADMIN` tries to create a rule | `403 "Mock user does not have the required role"` | ✅ live |
+| `BANK_ADMIN` tries to create a rule | `403 "Forbidden resource"` | ✅ live (`docs-bank-admin`) |
 | `BANK_ADMIN` lists/gets/views history | `200`, same data a superadmin would see | ✅ live |
 | Update a rule | `version` becomes 2, history gains a row with `changeReason` | ✅ live |
-| Deactivate a rule | `{ deactivated: true }`, later `get` → `404` | design-verified (soft-delete pattern reused from other modules) |
+| Deactivate a rule | `{ deactivated: true }`, later `get` → `404` | ✅ live |
 | `admin-user/list` with `role` filter | Only matching `roleName` rows returned | ✅ live |
 | `GET /admin/reporting` with query params | Always `[]`, params ignored | ✅ live — confirms it's a stub |
 

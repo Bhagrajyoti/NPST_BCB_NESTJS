@@ -27,12 +27,13 @@ Swagger: `http://localhost:3000/api/v1/docs`
 This module's controllers mount at the API root, not under `/rbac` — `/permissions/*`, `/roles/*`,
 `/employees/*`, `/users/*`.
 
-Every route requires `Authorization: Bearer <accessToken>`. Real, working local values:
+Every route requires `Authorization: Bearer <accessToken>` from a **real** Keycloak login
+(`AUTH_MOCK_MODE=false`). Real accounts verified live for this guide:
 
-| Role needed | Login with | Header |
-|---|---|---|
-| `BANK_SUPER_ADMIN` | `{"username":"mock-superadmin","password":"Mock@123"}` | `Authorization: Bearer mock-mock-superadmin-token` |
-| `BANK_ADMIN` (delegated cases only — see §4) | `{"username":"mock-admin","password":"Mock@123"}` | `Authorization: Bearer mock-mock-admin-token` |
+| Role needed | Login with |
+|---|---|
+| `BANK_SUPER_ADMIN` | `{"username":"test-bank-superadmin","password":"TestFix@123","clientId":"admin-web"}` |
+| `BANK_ADMIN` (delegated cases only — see §4) | `{"username":"docs-bank-admin","password":"DocsAdmin@123","clientId":"admin-web"}` |
 
 Every success response is wrapped `{ "success": true, "data": {...}, "timestamp": "..." }` — the
 JSON blocks below show `data`.
@@ -59,21 +60,21 @@ JSON blocks below show `data`.
 
 ### Request
 ```json
-{ "code": "BILL_PAYMENT_VIEW", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ" }
+{ "code": "BILL_PAYMENT_VIEW_REAL", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ" }
 ```
 
 ### Success Response
 ```json
 {
-  "id": "ef7ffd89-12bf-4737-967d-d1a395d97bcb",
-  "code": "BILL_PAYMENT_VIEW",
+  "id": "c9e13b7a-082c-4c4b-9917-7007640e6575",
+  "code": "BILL_PAYMENT_VIEW_REAL",
   "name": "View Bill Payments",
   "description": null,
   "module": "BILL_PAYMENT",
   "action": "READ",
   "isActive": true,
-  "createdAt": "2026-09-10T00:01:04.733Z",
-  "updatedAt": "2026-09-10T00:01:04.733Z"
+  "createdAt": "2026-09-10T00:46:07.090Z",
+  "updatedAt": "2026-09-10T00:46:07.090Z"
 }
 ```
 
@@ -92,7 +93,7 @@ A role is both a **real Keycloak realm role** (created via the Keycloak Admin AP
 ### Request fields
 | Field | Type | Required | Description |
 |---|---|---|---|
-| name | String (≤100) | Yes | Unique; becomes the literal Keycloak realm role name, e.g. `"BANK_CHECKER_DOCTEST"` |
+| name | String (≤100) | Yes | Unique; becomes the literal Keycloak realm role name, e.g. `"BANK_CHECKER_REALDOC"` |
 | displayName | String (≤150) | Yes | Human label |
 | description | String | No | |
 | delegatedAdminKeycloakUserIds | String[] | No | `BANK_ADMIN` Keycloak `sub`s allowed to assign this specific role (see below) |
@@ -104,24 +105,24 @@ without becoming superadmin. Get the `sub` from `POST /auth/me` or `admin_user.k
 
 ### Request
 ```json
-{ "name": "BANK_CHECKER_DOCTEST", "displayName": "Bank Checker (doctest)" }
+{ "name": "BANK_CHECKER_REALDOC", "displayName": "Bank Checker (real doc)" }
 ```
 
 ### Success Response
 ```json
 {
-  "id": "c0e1e98c-2e7d-4abd-835d-f26ce7ab1184",
-  "name": "BANK_CHECKER_DOCTEST",
-  "displayName": "Bank Checker (doctest)",
+  "id": "ee6b6345-d86c-424d-934c-ee7483393419",
+  "name": "BANK_CHECKER_REALDOC",
+  "displayName": "Bank Checker (real doc)",
   "description": null,
-  "keycloakRoleId": "2b5f093a-574c-4546-8e5b-3aac5d364fdb",
-  "keycloakRoleName": "BANK_CHECKER_DOCTEST",
+  "keycloakRoleId": "583b68e6-693a-4e3f-bf90-4d1a66b75925",
+  "keycloakRoleName": "BANK_CHECKER_REALDOC",
   "dutyType": "CHECKER",
   "isActive": true,
   "permissions": [],
   "delegatedAdminKeycloakUserIds": [],
-  "createdAt": "2026-09-10T00:01:05.132Z",
-  "updatedAt": "2026-09-10T00:01:05.132Z"
+  "createdAt": "2026-09-10T00:46:16.094Z",
+  "updatedAt": "2026-09-10T00:46:16.094Z"
 }
 ```
 `dutyType` is auto-derived from `name`: contains `"MAKER"` → `MAKER`; contains `"CHECKER"` →
@@ -160,26 +161,26 @@ current assignment — use `POST /employees/update-role` (§5) for that.
 
 ### Request
 ```json
-{ "roleId": "c0e1e98c-2e7d-4abd-835d-f26ce7ab1184", "permissionIds": ["ef7ffd89-12bf-4737-967d-d1a395d97bcb"] }
+{ "roleId": "ee6b6345-d86c-424d-934c-ee7483393419", "permissionIds": ["c9e13b7a-082c-4c4b-9917-7007640e6575"] }
 ```
 
 ### Success Response
 ```json
 {
-  "id": "c0e1e98c-2e7d-4abd-835d-f26ce7ab1184",
-  "name": "BANK_CHECKER_DOCTEST",
-  "displayName": "Bank Checker (doctest)",
+  "id": "ee6b6345-d86c-424d-934c-ee7483393419",
+  "name": "BANK_CHECKER_REALDOC",
+  "displayName": "Bank Checker (real doc)",
   "description": null,
-  "keycloakRoleId": "2b5f093a-574c-4546-8e5b-3aac5d364fdb",
-  "keycloakRoleName": "BANK_CHECKER_DOCTEST",
+  "keycloakRoleId": "583b68e6-693a-4e3f-bf90-4d1a66b75925",
+  "keycloakRoleName": "BANK_CHECKER_REALDOC",
   "dutyType": "CHECKER",
   "isActive": true,
   "permissions": [
-    { "id": "ef7ffd89-12bf-4737-967d-d1a395d97bcb", "code": "BILL_PAYMENT_VIEW", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ" }
+    { "id": "c9e13b7a-082c-4c4b-9917-7007640e6575", "code": "BILL_PAYMENT_VIEW_REAL", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ" }
   ],
   "delegatedAdminKeycloakUserIds": [],
-  "createdAt": "2026-09-10T00:01:05.132Z",
-  "updatedAt": "2026-09-10T00:01:05.132Z"
+  "createdAt": "2026-09-10T00:46:16.094Z",
+  "updatedAt": "2026-09-10T00:46:16.094Z"
 }
 ```
 
@@ -228,12 +229,12 @@ delegate for that specific role).
 ### Request
 ```json
 {
-  "username": "demo.checker.doctest",
-  "email": "demo.checker.doctest@bank.example.com",
+  "username": "demo.checker.realdoc",
+  "email": "demo.checker.realdoc@bank.example.com",
   "firstName": "Demo",
   "lastName": "Checker",
   "password": "DemoPass@123",
-  "roleId": "c0e1e98c-2e7d-4abd-835d-f26ce7ab1184"
+  "roleId": "ee6b6345-d86c-424d-934c-ee7483393419"
 }
 ```
 
@@ -241,24 +242,24 @@ delegate for that specific role).
 ```json
 {
   "employee": {
-    "id": "a49da071-302d-4082-96fe-c0767d7b6d28",
-    "keycloakUserId": "764f7d16-602f-4409-bdb6-331471841994",
-    "username": "demo.checker.doctest",
-    "email": "demo.checker.doctest@bank.example.com",
+    "id": "62e15599-1bae-4bd7-8cdc-8a88461d4700",
+    "keycloakUserId": "558ef921-3a91-4b5d-8f0c-6980a4b1768f",
+    "username": "demo.checker.realdoc",
+    "email": "demo.checker.realdoc@bank.example.com",
     "firstName": "Demo",
     "lastName": "Checker",
     "employeeCode": null,
     "isActive": true,
-    "createdAt": "2026-09-10T00:01:12.515Z"
+    "createdAt": "2026-09-10T00:46:16.928Z"
   },
   "roleAssignment": {
-    "id": "0c16657e-f335-4fd1-a62c-97115c7b5760",
-    "roleId": "c0e1e98c-2e7d-4abd-835d-f26ce7ab1184",
-    "assignedAt": "2026-09-10T00:01:12.529Z"
+    "id": "0edea544-67e2-4627-9dd6-9ee71e446eeb",
+    "roleId": "ee6b6345-d86c-424d-934c-ee7483393419",
+    "assignedAt": "2026-09-10T00:46:16.956Z"
   },
-  "role": { "id": "c0e1e98c-2e7d-4abd-835d-f26ce7ab1184", "name": "BANK_CHECKER_DOCTEST", "...": "full role object, same shape as §4" },
+  "role": { "id": "ee6b6345-d86c-424d-934c-ee7483393419", "name": "BANK_CHECKER_REALDOC", "...": "full role object, same shape as §4" },
   "keycloakRealmRoles": [
-    { "id": "2b5f093a-574c-4546-8e5b-3aac5d364fdb", "name": "BANK_CHECKER_DOCTEST", "composite": false, "clientRole": false, "containerId": "3ba5540c-337b-46c4-ab6e-7987dc5f2d87" },
+    { "id": "583b68e6-693a-4e3f-bf90-4d1a66b75925", "name": "BANK_CHECKER_REALDOC", "composite": false, "clientRole": false, "containerId": "3ba5540c-337b-46c4-ab6e-7987dc5f2d87" },
     { "id": "1c87b378-23b8-4623-a044-359d5834c8dc", "name": "default-roles-bharat-banking", "composite": true, "clientRole": false, "containerId": "3ba5540c-337b-46c4-ab6e-7987dc5f2d87" }
   ]
 }
@@ -312,7 +313,7 @@ created employees.
 
 ### Request
 ```json
-{ "keycloakUserId": "764f7d16-602f-4409-bdb6-331471841994" }
+{ "keycloakUserId": "558ef921-3a91-4b5d-8f0c-6980a4b1768f" }
 ```
 
 ### Success Response
@@ -321,11 +322,11 @@ created employees.
   "count": 1,
   "users": [
     {
-      "employee": { "id": "a49da071-...", "keycloakUserId": "764f7d16-...", "username": "demo.checker.doctest", "email": "...", "firstName": "Demo", "lastName": "Checker", "employeeCode": null, "isActive": true },
-      "keycloakProfile": { "id": "764f7d16-...", "username": "demo.checker.doctest", "email": "...", "firstName": "Demo", "lastName": "Checker", "enabled": true },
-      "keycloakRealmRoles": [ { "name": "BANK_CHECKER_DOCTEST", "...": "..." } ],
-      "roles": [ { "id": "c0e1e98c-...", "name": "BANK_CHECKER_DOCTEST", "displayName": "Bank Checker (doctest)", "keycloakRoleId": "...", "keycloakRoleName": "BANK_CHECKER_DOCTEST", "dutyType": "CHECKER" } ],
-      "permissions": [ { "id": "ef7ffd89-...", "code": "BILL_PAYMENT_VIEW", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ", "roleId": "c0e1e98c-..." } ]
+      "employee": { "id": "62e15599-...", "keycloakUserId": "558ef921-...", "username": "demo.checker.realdoc", "email": "...", "firstName": "Demo", "lastName": "Checker", "employeeCode": null, "isActive": true },
+      "keycloakProfile": { "id": "558ef921-...", "username": "demo.checker.realdoc", "email": "...", "firstName": "Demo", "lastName": "Checker", "enabled": true },
+      "keycloakRealmRoles": [ { "name": "BANK_CHECKER_REALDOC", "...": "..." } ],
+      "roles": [ { "id": "ee6b6345-...", "name": "BANK_CHECKER_REALDOC", "displayName": "Bank Checker (real doc)", "keycloakRoleId": "...", "keycloakRoleName": "BANK_CHECKER_REALDOC", "dutyType": "CHECKER" } ],
+      "permissions": [ { "id": "c9e13b7a-...", "code": "BILL_PAYMENT_VIEW_REAL", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ", "roleId": "ee6b6345-..." } ]
     }
   ]
 }
@@ -375,7 +376,7 @@ AdminUserSyncListener (admin module) — see adminservice.md §7
 | Map permissions to a role | Role's `permissions[]` reflects the mapping | ✅ live |
 | Create an employee | Real Keycloak user created, `admin_user` synced (if role qualifies) | ✅ live, end to end incl. login |
 | Employee logs in with issued credentials | `POST /auth/login` succeeds | ✅ live (real Keycloak, `AUTH_MOCK_MODE=false`) |
-| `BANK_ADMIN` (not delegated) creates an employee with a `BANK_ADMIN`-level role | `403` | design-verified (hierarchy check: 80 is not > 80) |
+| `BANK_ADMIN` (not delegated) creates an employee with a role it's not delegated for | `403 "...Superadmin delegation is required."` | ✅ live |
 | Assign both a `MAKER` and `CHECKER` role to the same request | `400` | design-verified (`assertMakerCheckerCompatibility`) |
 | `fetch-access-details` by `keycloakUserId` | Employee + Keycloak profile + roles + permissions | ✅ live |
 | `fetch-access-details` for a Keycloak-only user | `employee: null`, `keycloakProfile` populated via fallback | design-verified |

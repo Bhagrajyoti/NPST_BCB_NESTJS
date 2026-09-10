@@ -29,9 +29,11 @@ Every endpoint in this module is **POST**. Protected routes need:
 ```
 Authorization: Bearer <accessToken>
 ```
-`<accessToken>` is the literal value from `POST /auth/login` (§3) — never invent one. Locally
-(`AUTH_MOCK_MODE=true`), `Authorization: Bearer mock-mock-admin-token` works — see
-[mock-testing-guide.md](mock-testing-guide.md).
+`<accessToken>` is the literal value from `POST /auth/login` (§3) — never invent one. This
+service authenticates against the **real** Keycloak server (`AUTH_MOCK_MODE=false`) — you need a
+real account's username/password. A fixed set of fake credentials also exists for local/offline
+testing when Keycloak isn't reachable — see [mock-testing-guide.md](mock-testing-guide.md) (off
+by default; does not apply to the examples in this guide).
 
 Every success response is wrapped:
 ```json
@@ -60,22 +62,23 @@ Two Keycloak clients exist — pass the right one as `clientId` on login/logout:
 
 ### Request
 ```json
-{ "username": "mock-admin", "password": "Mock@123", "clientId": "admin-web" }
+{ "username": "test-bank-superadmin", "password": "TestFix@123", "clientId": "admin-web" }
 ```
 
 ### Success Response
 ```json
 {
-  "accessToken": "mock-mock-admin-token",
-  "expiresIn": 86400,
-  "refreshExpiresIn": 172800,
-  "refreshToken": "mock-mock-admin-refresh",
+  "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ3SHJhV3R2Tkd3dk5f...",
+  "expiresIn": 300,
+  "refreshExpiresIn": 1800,
+  "refreshToken": "eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIxZTQ5OTdiNC03YmYy...",
   "tokenType": "Bearer",
-  "scope": "openid profile email"
+  "scope": "email profile"
 }
 ```
-(Real-Keycloak responses have JWT-shaped `accessToken`/`refreshToken` and `expiresIn: 300`
-instead — the shape is identical either way.)
+`expiresIn: 300` — the token is only valid for **5 minutes**; re-login (or use `refreshToken`
+against Keycloak directly — this service doesn't expose a `/auth/refresh` endpoint) if a longer
+test session is needed. `refreshToken` itself is valid for `refreshExpiresIn: 1800` (30 minutes).
 
 **What to use, and where:** `accessToken` → `Authorization: Bearer <accessToken>` on every
 protected call below. `refreshToken` → body of `POST /auth/logout`.
@@ -100,7 +103,7 @@ protected call below. `refreshToken` → body of `POST /auth/logout`.
 
 ### Success Response
 ```json
-{ "user": { "sub": "00000000-0000-0000-0000-000000000002", "preferred_username": "mock-admin", "realm_access": { "roles": ["BANK_ADMIN"] } } }
+{ "user": { "sub": "584d3715-75be-4af0-a211-774d0b6b1e89", "preferred_username": "test-bank-superadmin", "realm_access": { "roles": ["default-roles-bharat-banking", "offline_access", "BANK_SUPER_ADMIN", "uma_authorization"] } } }
 ```
 **What to use, and where:** `user.sub` → `userId`/`keycloakUserId` input elsewhere
 (`/auth/credential/*`, `/auth/device/*`, `/auth/corporate-hierarchy/*`). `user.realm_access.roles`

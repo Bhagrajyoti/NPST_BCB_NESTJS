@@ -27,9 +27,10 @@ Every route in this module requires:
 ```
 Authorization: Bearer <accessToken>
 ```
-(`<accessToken>` from `POST /auth/login` — see [api endpoint guide.md](api%20endpoint%20guide.md).
-Locally, `Authorization: Bearer mock-mock-admin-token` works — see
-[mock-testing-guide.md](mock-testing-guide.md).)
+(`<accessToken>` from `POST /auth/login` against the real Keycloak server — see
+[api endpoint guide.md §3](api%20endpoint%20guide.md#3-token-api). Any authenticated account
+works here; no specific role is required for this module. Only the **BBPS call itself** is
+mocked — see §11 — login/auth are real.)
 
 Every success response is wrapped:
 ```json

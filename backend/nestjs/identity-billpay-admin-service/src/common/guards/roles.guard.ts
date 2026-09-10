@@ -34,10 +34,14 @@ export class RolesGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const userRoles: string[] = request.user?.realm_access?.roles ?? [];
 
+    // Auth() (see auth.decorator.ts) prefixes every role with `realm:` for the real RoleGuard's
+    // benefit — strip it back off here so mock mode compares against plain role names.
+    const requiredRoles = roleMetadata.roles.map((role) => role.replace(/^realm:/, ''));
+
     const granted =
       roleMetadata.mode === 'all'
-        ? roleMetadata.roles.every((role) => userRoles.includes(role))
-        : roleMetadata.roles.some((role) => userRoles.includes(role));
+        ? requiredRoles.every((role) => userRoles.includes(role))
+        : requiredRoles.some((role) => userRoles.includes(role));
 
     if (!granted) {
       throw new ForbiddenException('Mock user does not have the required role');

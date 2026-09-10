@@ -8,11 +8,14 @@ Related guides: [api endpoint guide.md](api%20endpoint%20guide.md) (`/auth/*`),
 
 ## 1. Overview
 
-`AUTH_MOCK_MODE` lets every endpoint in this service be exercised **without a reachable Keycloak
-server** — a fixed set of fake users stands in for real login, while every guard/role-check still
-runs exactly as it would in production. A separate, always-populated `demo_bbps_data` table gives
-`bill-payment` endpoints clean, fixed sample data independent of whatever the e2e test suite has
-left behind. Neither mechanism touches production behavior when left off (the default).
+**Current state of this environment: `AUTH_MOCK_MODE=false`.** Login and every role check run
+against the **real** Keycloak server — see [api endpoint guide.md](api%20endpoint%20guide.md),
+[adminservice.md](adminservice.md), and [rbacservice.md](rbacservice.md) for real, working
+account credentials. This file documents `AUTH_MOCK_MODE`, an **optional** switch you can still
+turn on if Keycloak becomes unreachable — it is not the active mode right now, and nothing below
+reflects the current default. The one thing that stays mocked regardless of this flag is the BBPS
+payment simulation itself (§6) — that's a separate, always-on mock (there is no real BBPS
+integration yet), unrelated to `AUTH_MOCK_MODE`.
 
 ## 2. Why This Exists
 
@@ -25,7 +28,9 @@ valid `accessToken` was ever obtained from `POST /auth/login`, or it wasn't sent
 (`KEYCLOAK_AUTH_SERVER_URL` in `.env`). Neither Swagger's `corp-maker-01` example nor the e2e
 suite's `api-test-user` are real Keycloak accounts — the e2e suite replaces `KeycloakService`
 with a mock entirely (see [test/e2e/helpers/test-app.ts](test/e2e/helpers/test-app.ts)). Manual
-testing against real Keycloak was a dead end without a working account, hence this mode.
+testing against real Keycloak was a dead end without a working account before real credentials
+were available — hence this mode existed and remains here for future offline use (e.g. Keycloak
+outage, CI without network access).
 
 ## 3. Turning On Mock Auth
 
