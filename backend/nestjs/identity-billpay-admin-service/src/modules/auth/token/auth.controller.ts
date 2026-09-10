@@ -12,6 +12,8 @@ import { KeycloakService } from '../keycloak/keycloak.service';
 import { LoginDto } from './dto/login.dto';
 // DTO (./dto/logout.dto.ts) validating/shaping the logout request body (refreshToken, optional clientId).
 import { LogoutDto } from './dto/logout.dto';
+// DTO (./dto/signup.dto.ts) validating/shaping the signup request body (username, password, optional email/firstName/lastName).
+import { SignupDto } from './dto/signup.dto';
 // DTO (./dto/token-response.dto.ts) describing the shape of the token payload returned to callers, used here only for Swagger response typing.
 import { TokenResponseDto } from './dto/token-response.dto';
 
@@ -48,6 +50,25 @@ export class AuthController {
   login(@Body() dto: LoginDto) {
     // ...and forwards it to KeycloakService.login, which calls Keycloak's /protocol/openid-connect/token endpoint (grant_type=password) and returns access/refresh tokens.
     return this.keycloakService.login(dto);
+  }
+
+  // Exempts this route too — signup is how an account exists in the first place.
+  @Public()
+  // Maps this handler to POST /auth/signup.
+  @Post('signup')
+  @ApiOperation({
+    summary: 'Signup',
+    description:
+      'Creates a real Keycloak user (role RETAIL_CUSTOMER) from just a username/password. ' +
+      'Use the same username/password with POST /auth/login afterwards to get tokens. For the ' +
+      'full customer-onboarding flow (OTP + device + saga), use POST /auth/registration/* instead.',
+  })
+  @ApiResponse({ status: 201, description: 'Account created' })
+  @ApiResponse({ status: 409, description: 'Username already exists' })
+  // Handler: takes the validated SignupDto from the request body...
+  signup(@Body() dto: SignupDto) {
+    // ...and forwards it to KeycloakService.signup, which creates the Keycloak user and assigns RETAIL_CUSTOMER.
+    return this.keycloakService.signup(dto);
   }
 
   // Maps this handler to POST /auth/logout.

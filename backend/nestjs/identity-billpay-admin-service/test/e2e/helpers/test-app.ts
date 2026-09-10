@@ -36,6 +36,10 @@ export const mockKeycloakService = {
     scope: 'email profile',
   }),
   logout: jest.fn().mockResolvedValue({ loggedOut: true }),
+  signup: jest.fn().mockImplementation(async (dto: { username: string }) => ({
+    keycloakUserId: randomUUID(),
+    username: dto.username,
+  })),
   createRealmRole: jest.fn().mockImplementation(async (payload: { name: string }) => ({
     id: '22222222-2222-2222-2222-222222222222',
     name: payload.name,

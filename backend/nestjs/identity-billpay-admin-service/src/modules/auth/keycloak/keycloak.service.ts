@@ -1,12 +1,15 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { LoginDto } from '../token/dto/login.dto';
 import { LogoutDto } from '../token/dto/logout.dto';
+import { SignupDto } from '../token/dto/signup.dto';
 import { TokenResponseDto } from '../token/dto/token-response.dto';
 import { findMockUserByUsername } from './mock-users.const';
+
+const SIGNUP_ROLE = 'RETAIL_CUSTOMER';
 
 interface KeycloakTokenResponse {
   access_token: string;
@@ -141,6 +144,33 @@ export class KeycloakService {
         'Logout failed';
       throw new UnauthorizedException(message);
     }
+  }
+
+  /**
+   * Self-service account creation: creates a real Keycloak user (role RETAIL_CUSTOMER) from
+   * just a username/password, so it can be used with POST /auth/login right away — no OTP,
+   * device, or multi-step saga (contrast with POST /auth/registration/*, which exists for the
+   * full customer-onboarding flow). Not affected by AUTH_MOCK_MODE — like createUser/
+   * assignRealmRoleToUser, this always calls the real Keycloak Admin API.
+   */
+  async signup(dto: SignupDto): Promise<{ keycloakUserId: string; username: string }> {
+    const existing = await this.findUsersByUsername(dto.username);
+    if (existing.length > 0) {
+      throw new ConflictException(`Username ${dto.username} already exists`);
+    }
+
+    const user = await this.createUser({
+      username: dto.username,
+      email: dto.email ?? `${dto.username}@signup.bharat-banking.local`,
+      firstName: dto.firstName ?? dto.username,
+      lastName: dto.lastName ?? dto.username,
+      password: dto.password,
+      enabled: true,
+    });
+
+    await this.assignRealmRoleToUser(user.id, SIGNUP_ROLE);
+
+    return { keycloakUserId: user.id, username: dto.username };
   }
 
   private adminBaseUrl(): string {

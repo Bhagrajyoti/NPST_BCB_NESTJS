@@ -32,10 +32,9 @@ describe('Registration saga resumption (e2e)', () => {
     return res.body.data.id as string;
   }
 
-  async function createOtpChallenge(mobileNumber: string, idempotencyKey: string) {
+  async function createOtpChallenge(mobileNumber: string) {
     const res = await publicRequest(app)
       .post('/api/v1/auth/otp/create')
-      .set('Idempotency-Key', idempotencyKey)
       .send({ mobileNumber })
       .expect(201);
     return { challengeId: res.body.data.id as string, otp: res.body.data.otp as string };
@@ -52,7 +51,7 @@ describe('Registration saga resumption (e2e)', () => {
     expect(resumeAtInit.body.data.currentStep).toBe('INIT');
     expect(resumeAtInit.body.data.nextAction).toMatch(/otp/i);
 
-    const { challengeId, otp } = await createOtpChallenge(mobileNumber, `otp-${attemptId}`);
+    const { challengeId, otp } = await createOtpChallenge(mobileNumber);
 
     await publicRequest(app)
       .post('/api/v1/auth/registration/verify-otp')
@@ -70,7 +69,7 @@ describe('Registration saga resumption (e2e)', () => {
   it('runs the full saga end to end: create → verify-otp → create-credentials → register-device → complete', async () => {
     const mobileNumber = `9${Date.now().toString().slice(-9)}`;
     const attemptId = await createAttempt(mobileNumber);
-    const { challengeId, otp } = await createOtpChallenge(mobileNumber, `otp-full-${attemptId}`);
+    const { challengeId, otp } = await createOtpChallenge(mobileNumber);
 
     await publicRequest(app)
       .post('/api/v1/auth/registration/verify-otp')
@@ -122,7 +121,7 @@ describe('Registration saga resumption (e2e)', () => {
   it('compensates (rolls back) when create-credentials fails partway through', async () => {
     const mobileNumber = `9${Date.now().toString().slice(-9)}`;
     const attemptId = await createAttempt(mobileNumber);
-    const { challengeId, otp } = await createOtpChallenge(mobileNumber, `otp-fail-${attemptId}`);
+    const { challengeId, otp } = await createOtpChallenge(mobileNumber);
 
     await publicRequest(app)
       .post('/api/v1/auth/registration/verify-otp')

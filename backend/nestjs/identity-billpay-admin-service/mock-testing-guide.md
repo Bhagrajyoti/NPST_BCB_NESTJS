@@ -54,10 +54,13 @@ accepts hardcoded passwords for anyone.
 | [`KeycloakAuthGuard`](src/common/guards/keycloak-auth.guard.ts) | Replaces nest-keycloak-connect's `AuthGuard` — parses the mock bearer token, attaches `request.user` in the same shape a real Keycloak JWT would |
 | [`RolesGuard`](src/common/guards/roles.guard.ts) | Replaces nest-keycloak-connect's `RoleGuard` — enforces `@Auth('SOME_ROLE')` against the mock user's roles identically to production |
 
-`KeycloakService.createUser`/`assignRealmRoleToUser`/`disableUser`/etc. are **not** mocked — they
-always hit the real Keycloak Admin API, even with `AUTH_MOCK_MODE=true` (this is what lets the
-registration saga and `/employees/create` provision real, loggable-in accounts during mock-mode
-testing — see §7). Only the `login`/`logout` grant flow is stubbed.
+`KeycloakService.createUser`/`assignRealmRoleToUser`/`disableUser`/`signup`/etc. are **not**
+mocked — they always hit the real Keycloak Admin API, even with `AUTH_MOCK_MODE=true` (this is
+what lets the registration saga, `/employees/create`, and `POST /auth/signup` provision real,
+loggable-in accounts during mock-mode testing — see §7). Only the `login`/`logout` grant flow is
+stubbed — so an account created via `POST /auth/signup` while mock mode is on is a **real**
+Keycloak account, but you can't actually log into it with `POST /auth/login` until you turn mock
+mode back off (mock `login` only recognizes the fixed usernames in §5).
 
 ## 5. Mock Users
 
@@ -144,15 +147,6 @@ curl -X POST http://localhost:3000/api/v1/bill-payment/payment \
 curl -X POST http://localhost:3000/api/v1/bill-payment/payment/retry \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"id":"<paymentId from above>"}'
-```
-
-`POST /auth/otp/create` requires an `Idempotency-Key` **header** (distinct from `payment`'s
-`idempotencyKey` **body field** — see [api endpoint guide.md §5](api%20endpoint%20guide.md#5-otp-api)):
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/otp/create \
-  -H "Content-Type: application/json" -H "Idempotency-Key: any-unique-string" \
-  -d '{"mobileNumber":"9000000009"}'
-# omit the header -> 400
 ```
 
 ## 8. Testing Scenarios

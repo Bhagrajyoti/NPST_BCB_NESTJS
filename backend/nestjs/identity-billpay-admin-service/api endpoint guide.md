@@ -9,12 +9,16 @@ server).
 
 ## 1. Overview
 
-The Auth module provides token issuance (`POST /auth/login`/`/auth/logout`/`/auth/me`), a
+The Auth module provides token issuance (`POST /auth/signup`/`/login`/`/logout`/`/me`), a
 five-step resumable customer-onboarding saga (registration → OTP → credentials/Keycloak user →
 device → complete), standalone OTP generation/verification, customer MPIN credential management,
 device registration, and corporate-hierarchy role linking. Keycloak is the system of record for
 login identity; MySQL persists everything else (OTP challenges, MPIN hashes, device profiles,
 registration-attempt state).
+
+`signup` and the full registration saga are two independent paths to a working account — `signup`
+is the fast one-call path (just username/password), the saga is the full one (OTP-verified mobile
+number, device registration). Pick whichever fits; a customer only needs one of them.
 
 Module: [src/modules/auth](src/modules/auth) ([auth.module.ts](src/modules/auth/auth.module.ts)).
 
@@ -50,6 +54,39 @@ Two Keycloak clients exist — pass the right one as `clientId` on login/logout:
 `mobile-app` (retail/corporate customer) or `admin-web` (bank staff, default if omitted).
 
 ## 3. Token API
+
+**`POST`** `/auth/signup` — Public.
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| username | String (≤100) | Yes | Becomes the login id — exactly what you pass to `POST /auth/login` next |
+| password | String (8–128 chars) | Yes | |
+| email | String (email) | No | Defaults to `"<username>@signup.bharat-banking.local"` |
+| firstName | String (≤100) | No | Defaults to `username` |
+| lastName | String (≤100) | No | Defaults to `username` |
+
+### Request
+```json
+{ "username": "jane.doe.signup", "password": "MySecurePass@123" }
+```
+
+### Success Response
+```json
+{ "keycloakUserId": "eb366273-bff8-47b8-b86f-26100e581637", "username": "jane.doe.signup" }
+```
+
+Creates a real Keycloak user with role `RETAIL_CUSTOMER` — no OTP, device registration, or
+multi-step saga (contrast with the full onboarding flow in §4, which additionally verifies a
+mobile number and links a device). Not affected by `AUTH_MOCK_MODE` — this always hits the real
+Keycloak Admin API, the same as `createUser` everywhere else in this service.
+
+**What to use, and where:** the `username`/`password` you just sent are exactly what you pass to
+`POST /auth/login` next (any `clientId`) to get `accessToken`/`refreshToken`. `keycloakUserId` →
+`userId` anywhere else in this API that takes a Keycloak user id (`/auth/credential/*`,
+`/auth/device/*`).
+
+**Errors:** `409` — `username` already exists.
 
 **`POST`** `/auth/login` — Public.
 
@@ -215,8 +252,7 @@ take `{ "id": "<attemptId>" }`; `delete` soft-deletes (`{ id, deleted: true }`).
 
 ## 5. OTP API
 
-**`POST`** `/auth/otp/create` — Public **and requires an `Idempotency-Key` header** (any unique
-client-generated string — prevents a client retry from sending a second SMS for the same request).
+**`POST`** `/auth/otp/create` — Public.
 
 ### Request fields
 | Field | Type | Required | Description |
@@ -233,8 +269,7 @@ never returned here).
 **What to use, and where:** `id` (as `challengeId`) + `otp` → `POST /auth/otp/verify` or
 `POST /auth/registration/verify-otp`.
 
-**Errors:** `400` missing `Idempotency-Key` header or invalid `mobileNumber` · `409`
-`Idempotency-Key` reused with a different `mobileNumber`.
+**Errors:** `400` invalid `mobileNumber`.
 
 **`POST`** `/auth/otp/verify` — Public (this is how identity is proven *before* any token exists).
 
@@ -396,16 +431,6 @@ reserved for future use — no endpoint currently sets it.
 | approval_limit | DECIMAL(18,2), nullable | Reserved, unused |
 | created_at / updated_at / deleted_at | TIMESTAMP | |
 
-**`idempotency_record`** — backs the `Idempotency-Key` header on `POST /auth/otp/create`.
-| Field | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| idempotency_key | VARCHAR, indexed | |
-| route | VARCHAR | e.g. `"POST /api/v1/auth/otp/create"` |
-| request_hash | VARCHAR | SHA-256 of the request body |
-| created_at | TIMESTAMP | |
-| — | unique on (`idempotency_key`, `route`) | |
-
 ## 10. Registration Saga Flow
 
 ```
@@ -433,17 +458,19 @@ POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from
 | Code / status | Where | Meaning |
 |---|---|---|
 | `401` | any protected route | missing/invalid Bearer token, or bad login credentials |
+| `409` | `signup` | `username` already exists |
 | `403` | credential `*` | IDOR — `userId` differs from caller and caller isn't `BANK_ADMIN`/`BANK_SUPER_ADMIN` |
 | `403` | `otp/verify`, `registration/verify-otp` | challenge locked after too many wrong attempts |
 | `404` | `otp/*`, `registration/*`, `device/*`, `corporate-hierarchy/*` gets | unknown `id`/`challengeId` |
-| `400` | `otp/create` | missing `Idempotency-Key` header |
-| `409` | `otp/create` | `Idempotency-Key` reused with a different `mobileNumber` |
 | `400` | `registration/verify-otp\|create-credentials\|register-device\|complete` | wrong OTP, or attempt not at the required step |
 
 ## 12. Testing Scenarios
 
 | Scenario | Expected Result | Verified |
 |---|---|---|
+| Signup with a new username | `201`, real Keycloak user created, role `RETAIL_CUSTOMER` | ✅ live |
+| Signup with an already-taken username | `409` | ✅ live |
+| Log in with the exact username/password just signed up | `201`, real tokens returned | ✅ live end-to-end |
 | Valid login | `accessToken`/`refreshToken` returned | ✅ live |
 | Wrong password | `401` | ✅ live |
 | Full registration saga, step by step | Ends `COMPLETED`, real Keycloak user created | ✅ live end-to-end |
@@ -454,12 +481,12 @@ POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from
 | OTP: correct code | `{ verified: true }`, challenge invalidated | ✅ (unit test) |
 | OTP: wrong code repeated past `OTP_MAX_ATTEMPTS` | `403`, locked for `OTP_LOCK_MINUTES` | ✅ (unit test) |
 | OTP: expired challenge | `400` even with the correct code | ✅ (unit test) |
-| `otp/create` without `Idempotency-Key` | `400` | ✅ (e2e test) |
 | Customer passes another customer's `userId` to `credential/get` | `403` (unless caller is `BANK_ADMIN`/`BANK_SUPER_ADMIN`) | ✅ (unit test) |
 
 ## 13. Frontend Integration Note
 
-Generate a fresh `Idempotency-Key` per **new** `POST /auth/otp/create` request; reuse it only for
-a retry of that exact same request (dropped connection, timeout) — not for a new OTP send.
 Persist `attemptId` client-side through the whole registration saga; on app relaunch, call
 `POST /auth/registration/resume` with it before assuming onboarding needs to restart from scratch.
+`POST /bill-payment/payment`'s `idempotencyKey` **body field** (a completely separate mechanism —
+see [billpaymentservice.md](billpaymentservice.md)) is the only idempotency requirement left
+anywhere in this API; nothing under `/auth/*` requires one.

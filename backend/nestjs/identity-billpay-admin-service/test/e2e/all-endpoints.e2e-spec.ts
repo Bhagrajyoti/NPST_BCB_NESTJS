@@ -38,6 +38,15 @@ describe('All API endpoints (e2e)', () => {
   });
 
   describe('Auth', () => {
+    it('POST /api/v1/auth/signup', async () => {
+      const res = await publicRequest(app)
+        .post('/api/v1/auth/signup')
+        .send({ username: `signup.user.${Date.now()}`, password: 'SignupPass@123' })
+        .expect(201);
+      expect(res.body.data.keycloakUserId).toBeDefined();
+      expect(mockKeycloakService.signup).toHaveBeenCalled();
+    });
+
     it('POST /api/v1/auth/login', async () => {
       const res = await publicRequest(app)
         .post('/api/v1/auth/login')
@@ -233,7 +242,6 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/otp/create', async () => {
       const res = await publicRequest(app)
         .post('/api/v1/auth/otp/create')
-        .set('Idempotency-Key', `otp-create-${Date.now()}`)
         .send({ mobileNumber: '9998887776' })
         .expect(201);
       expect(res.body.data.id).toBeDefined();
@@ -242,7 +250,6 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/otp/get', async () => {
       const created = await publicRequest(app)
         .post('/api/v1/auth/otp/create')
-        .set('Idempotency-Key', `otp-get-${Date.now()}`)
         .send({ mobileNumber: '9998887775' });
 
       await authedRequest(app)
@@ -254,7 +261,6 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/otp/delete', async () => {
       const created = await publicRequest(app)
         .post('/api/v1/auth/otp/create')
-        .set('Idempotency-Key', `otp-delete-${Date.now()}`)
         .send({ mobileNumber: '9998887774' });
 
       const res = await authedRequest(app)

@@ -211,9 +211,8 @@ Same key + different billerCode/consumerNumber/amount
                             → 400 IDEMPOTENCY_KEY_REUSED
 ```
 
-This is a **body field**, distinct from `POST /auth/otp/create`'s `Idempotency-Key` **header**
-(see [api endpoint guide.md §5](api%20endpoint%20guide.md#5-otp-api)) — different
-mechanism, same purpose.
+This is a **body field**, specific to this endpoint — it's the only idempotency requirement
+anywhere in this API (see [api endpoint guide.md](api%20endpoint%20guide.md)).
 
 ## 9. Database Tables
 
