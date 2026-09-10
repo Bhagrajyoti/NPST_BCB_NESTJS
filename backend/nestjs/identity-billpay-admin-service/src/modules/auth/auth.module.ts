@@ -20,6 +20,8 @@ import { OtpController } from './otp/otp.controller';
 import { OtpService } from './otp/otp.service';
 import { OtpChallenge } from './otp/entities/otp-challenge.entity';
 import { KeycloakService } from './keycloak/keycloak.service';
+import { IdempotencyRecord } from '../../common/entities/idempotency-record.entity';
+import { IdempotencyGuard } from '../../common/guards/idempotency.guard';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
       DeviceProfile,
       CorporateHierarchy,
       OtpChallenge,
+      IdempotencyRecord,
     ]),
   ],
   controllers: [
@@ -49,6 +52,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
     CorporateHierarchyService,
     OtpService,
     KeycloakService,
+    IdempotencyGuard,
   ],
   exports: [KeycloakService],
 })

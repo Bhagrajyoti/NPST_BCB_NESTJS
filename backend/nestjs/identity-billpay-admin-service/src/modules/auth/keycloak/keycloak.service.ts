@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { LoginDto } from '../token/dto/login.dto';
 import { LogoutDto } from '../token/dto/logout.dto';
 import { TokenResponseDto } from '../token/dto/token-response.dto';
+import { findMockUserByUsername } from './mock-users.const';
 
 interface KeycloakTokenResponse {
   access_token: string;
@@ -49,7 +50,30 @@ export class KeycloakService {
     };
   }
 
+  private isMockAuth(): boolean {
+    return this.configService.get<string>('app.authMockMode') === 'true';
+  }
+
+  private mockLogin(dto: LoginDto): TokenResponseDto {
+    const user = findMockUserByUsername(dto.username);
+    if (!user || user.password !== dto.password) {
+      throw new UnauthorizedException('Invalid user credentials');
+    }
+    return {
+      accessToken: `mock-${user.username}-token`,
+      expiresIn: 86400,
+      refreshExpiresIn: 172800,
+      refreshToken: `mock-${user.username}-refresh`,
+      tokenType: 'Bearer',
+      scope: 'openid profile email',
+    };
+  }
+
   async login(dto: LoginDto): Promise<TokenResponseDto> {
+    if (this.isMockAuth()) {
+      return this.mockLogin(dto);
+    }
+
     const client = this.resolveClient(dto.clientId);
     const body = new URLSearchParams({
       grant_type: 'password',
@@ -88,6 +112,10 @@ export class KeycloakService {
   }
 
   async logout(dto: LogoutDto): Promise<{ loggedOut: boolean }> {
+    if (this.isMockAuth()) {
+      return { loggedOut: dto.refreshToken.startsWith('mock-') };
+    }
+
     const client = this.resolveClient(dto.clientId);
     const body = new URLSearchParams({
       client_id: client.clientId,

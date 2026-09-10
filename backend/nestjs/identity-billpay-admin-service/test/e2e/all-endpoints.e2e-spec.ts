@@ -33,7 +33,7 @@ describe('All API endpoints (e2e)', () => {
   describe('Health', () => {
     it('POST /api/v1/health/check', async () => {
       const res = await publicRequest(app).post('/api/v1/health/check').expect(201);
-      expect(res.body.status).toBe('ok');
+      expect(res.body.data.status).toBe('ok');
     });
   });
 
@@ -43,7 +43,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/auth/login')
         .send({ username: 'api-test-user', password: 'ApiTest@123' })
         .expect(201);
-      expect(res.body.accessToken).toBe('test-access-token');
+      expect(res.body.data.accessToken).toBe('test-access-token');
       expect(mockKeycloakService.login).toHaveBeenCalled();
     });
 
@@ -52,12 +52,12 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/auth/logout')
         .send({ refreshToken: 'test-refresh-token', clientId: 'admin-web' })
         .expect(201);
-      expect(res.body.loggedOut).toBe(true);
+      expect(res.body.data.loggedOut).toBe(true);
     });
 
     it('POST /api/v1/auth/me', async () => {
       const res = await authedRequest(app).post('/api/v1/auth/me').expect(201);
-      expect(res.body.user).toBeDefined();
+      expect(res.body.data.user).toBeDefined();
     });
   });
 
@@ -71,7 +71,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/auth/registration/create')
         .send({ mobileNumber: '9876543210', panOrCif: 'CIF12345' })
         .expect(201);
-      expect(res.body.id).toBeDefined();
+      expect(res.body.data.id).toBeDefined();
     });
 
     it('POST /api/v1/auth/registration/get', async () => {
@@ -81,7 +81,7 @@ describe('All API endpoints (e2e)', () => {
 
       await authedRequest(app)
         .post('/api/v1/auth/registration/get')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
     });
 
@@ -92,9 +92,9 @@ describe('All API endpoints (e2e)', () => {
 
       const res = await authedRequest(app)
         .post('/api/v1/auth/registration/delete')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
-      expect(res.body.deleted).toBe(true);
+      expect(res.body.data.deleted).toBe(true);
     });
   });
 
@@ -110,8 +110,8 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/auth/credential/create')
         .send({ userId: keycloakUserId, mpin: '1234' })
         .expect(201);
-      expect(res.body.keycloakUserId).toBe(keycloakUserId);
-      expect(res.body.mpin.hasMpin).toBe(true);
+      expect(res.body.data.keycloakUserId).toBe(keycloakUserId);
+      expect(res.body.data.mpin.hasMpin).toBe(true);
     });
 
     it('POST /api/v1/auth/credential/get', async () => {
@@ -135,7 +135,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/auth/credential/delete')
         .send({ userId: keycloakUserId })
         .expect(201);
-      expect(res.body.deleted).toBe(true);
+      expect(res.body.data.deleted).toBe(true);
     });
   });
 
@@ -149,7 +149,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/auth/device/create')
         .send({ userId: randomUUID(), deviceId: `device-${Date.now()}`, deviceModel: 'Test Phone' })
         .expect(201);
-      expect(res.body.id).toBeDefined();
+      expect(res.body.data.id).toBeDefined();
     });
 
     it('POST /api/v1/auth/device/get', async () => {
@@ -159,7 +159,7 @@ describe('All API endpoints (e2e)', () => {
 
       await authedRequest(app)
         .post('/api/v1/auth/device/get')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
     });
 
@@ -170,9 +170,9 @@ describe('All API endpoints (e2e)', () => {
 
       const res = await authedRequest(app)
         .post('/api/v1/auth/device/delete')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
-      expect(res.body.deleted).toBe(true);
+      expect(res.body.data.deleted).toBe(true);
     });
   });
 
@@ -190,7 +190,7 @@ describe('All API endpoints (e2e)', () => {
           role: 'CORPORATE_MAKER',
         })
         .expect(201);
-      expect(res.body.id).toBeDefined();
+      expect(res.body.data.id).toBeDefined();
     });
 
     it('POST /api/v1/auth/corporate-hierarchy/get', async () => {
@@ -204,7 +204,7 @@ describe('All API endpoints (e2e)', () => {
 
       await authedRequest(app)
         .post('/api/v1/auth/corporate-hierarchy/get')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
     });
 
@@ -219,9 +219,9 @@ describe('All API endpoints (e2e)', () => {
 
       const res = await authedRequest(app)
         .post('/api/v1/auth/corporate-hierarchy/delete')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
-      expect(res.body.deleted).toBe(true);
+      expect(res.body.data.deleted).toBe(true);
     });
   });
 
@@ -233,32 +233,35 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/otp/create', async () => {
       const res = await publicRequest(app)
         .post('/api/v1/auth/otp/create')
+        .set('Idempotency-Key', `otp-create-${Date.now()}`)
         .send({ mobileNumber: '9998887776' })
         .expect(201);
-      expect(res.body.id).toBeDefined();
+      expect(res.body.data.id).toBeDefined();
     });
 
     it('POST /api/v1/auth/otp/get', async () => {
       const created = await publicRequest(app)
         .post('/api/v1/auth/otp/create')
+        .set('Idempotency-Key', `otp-get-${Date.now()}`)
         .send({ mobileNumber: '9998887775' });
 
       await authedRequest(app)
         .post('/api/v1/auth/otp/get')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
     });
 
     it('POST /api/v1/auth/otp/delete', async () => {
       const created = await publicRequest(app)
         .post('/api/v1/auth/otp/create')
+        .set('Idempotency-Key', `otp-delete-${Date.now()}`)
         .send({ mobileNumber: '9998887774' });
 
       const res = await authedRequest(app)
         .post('/api/v1/auth/otp/delete')
-        .send({ id: created.body.id })
+        .send({ id: created.body.data.id })
         .expect(201);
-      expect(res.body.deleted).toBe(true);
+      expect(res.body.data.deleted).toBe(true);
     });
   });
 
@@ -275,7 +278,7 @@ describe('All API endpoints (e2e)', () => {
           action: 'READ',
         })
         .expect(201);
-      expect(res.body.code).toBe(code);
+      expect(res.body.data.code).toBe(code);
     });
   });
 
@@ -292,7 +295,7 @@ describe('All API endpoints (e2e)', () => {
           module: 'TEST',
           action: 'WRITE',
         });
-      permissionId = permission.body.id;
+      permissionId = permission.body.data.id;
     });
 
     it('POST /api/v1/roles/create', async () => {
@@ -305,8 +308,8 @@ describe('All API endpoints (e2e)', () => {
           description: 'E2E role',
         })
         .expect(201);
-      expect(res.body.name).toBe(roleName);
-      roleId = res.body.id;
+      expect(res.body.data.name).toBe(roleName);
+      roleId = res.body.data.id;
       expect(mockKeycloakService.createRealmRole).toHaveBeenCalled();
     });
 
@@ -315,7 +318,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/roles/map-permissions')
         .send({ roleId, permissionIds: [permissionId] })
         .expect(201);
-      expect(res.body.permissions).toHaveLength(1);
+      expect(res.body.data.permissions).toHaveLength(1);
     });
 
     it('POST /api/v1/roles/update', async () => {
@@ -327,7 +330,7 @@ describe('All API endpoints (e2e)', () => {
           description: 'Updated description',
         })
         .expect(201);
-      expect(res.body.displayName).toBe('Updated Test Role');
+      expect(res.body.data.displayName).toBe('Updated Test Role');
     });
   });
 
@@ -349,11 +352,11 @@ describe('All API endpoints (e2e)', () => {
           firstName: 'Emp',
           lastName: 'User',
           password: 'EmpUser@123',
-          roleId: role.body.id,
+          roleId: role.body.data.id,
           employeeCode: `EMP-${suffix}`,
         })
         .expect(201);
-      expect(res.body.employee.keycloakUserId).toBeDefined();
+      expect(res.body.data.employee.keycloakUserId).toBeDefined();
       expect(mockKeycloakService.createUser).toHaveBeenCalled();
     });
 
@@ -381,19 +384,19 @@ describe('All API endpoints (e2e)', () => {
           firstName: 'Update',
           lastName: 'Target',
           password: 'EmpUser@123',
-          roleId: roleA.body.id,
+          roleId: roleA.body.data.id,
         })
         .expect(201);
 
       const res = await authedRequest(app)
         .post('/api/v1/employees/update-role')
         .send({
-          employeeId: created.body.employee.id,
-          roleId: roleB.body.id,
+          employeeId: created.body.data.employee.id,
+          roleId: roleB.body.data.id,
         })
         .expect(201);
 
-      expect(res.body.role.id).toBe(roleB.body.id);
+      expect(res.body.data.role.id).toBe(roleB.body.data.id);
       expect(mockKeycloakService.removeRealmRoleFromUser).toHaveBeenCalled();
       expect(mockKeycloakService.assignRealmRoleToUser).toHaveBeenCalled();
     });
@@ -433,7 +436,7 @@ describe('All API endpoints (e2e)', () => {
           firstName: 'Super',
           lastName: 'Employee',
           password: 'EmpUser@123',
-          roleId: superRole.body.id,
+          roleId: superRole.body.data.id,
         })
         .expect(201);
 
@@ -448,8 +451,8 @@ describe('All API endpoints (e2e)', () => {
       await authedRequest(bankAdminApp)
         .post('/api/v1/employees/update-role')
         .send({
-          employeeId: employee.body.employee.id,
-          roleId: makerRole.body.id,
+          employeeId: employee.body.data.employee.id,
+          roleId: makerRole.body.data.id,
         })
         .expect(403);
     });
@@ -480,19 +483,19 @@ describe('All API endpoints (e2e)', () => {
           firstName: 'Maker',
           lastName: 'Employee',
           password: 'EmpUser@123',
-          roleId: makerRole.body.id,
+          roleId: makerRole.body.data.id,
         })
         .expect(201);
 
       const res = await authedRequest(bankAdminApp)
         .post('/api/v1/employees/update-role')
         .send({
-          employeeId: employee.body.employee.id,
-          roleId: lowRole.body.id,
+          employeeId: employee.body.data.employee.id,
+          roleId: lowRole.body.data.id,
         })
         .expect(201);
 
-      expect(res.body.role.id).toBe(lowRole.body.id);
+      expect(res.body.data.role.id).toBe(lowRole.body.data.id);
     });
   });
 
@@ -502,8 +505,8 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/users/fetch-access-details')
         .send({})
         .expect(201);
-      expect(res.body).toHaveProperty('count');
-      expect(res.body).toHaveProperty('users');
+      expect(res.body.data).toHaveProperty('count');
+      expect(res.body.data).toHaveProperty('users');
     });
   });
 
@@ -536,8 +539,8 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/admin/admin-user/list')
         .send({})
         .expect(201);
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.some((u: { id: string }) => u.id === seededId)).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.some((u: { id: string }) => u.id === seededId)).toBe(true);
     });
 
     it('POST /api/v1/admin/admin-user/get', async () => {
@@ -545,7 +548,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/admin/admin-user/get')
         .send({ id: seededId })
         .expect(201);
-      expect(res.body.id).toBe(seededId);
+      expect(res.body.data.id).toBe(seededId);
     });
 
     it('POST /api/v1/admin/admin-user/get returns 404 for an unknown id', async () => {
@@ -574,15 +577,15 @@ describe('All API endpoints (e2e)', () => {
           threshold: '500000.00',
         })
         .expect(201);
-      expect(res.body.version).toBe(1);
-      ruleId = res.body.id;
+      expect(res.body.data.version).toBe(1);
+      ruleId = res.body.data.id;
     });
 
     it('POST /api/v1/admin/authorization-rules/list', async () => {
       const res = await authedRequest(app)
         .post('/api/v1/admin/authorization-rules/list')
         .expect(201);
-      expect(res.body.some((r: { id: string }) => r.id === ruleId)).toBe(true);
+      expect(res.body.data.some((r: { id: string }) => r.id === ruleId)).toBe(true);
     });
 
     it('POST /api/v1/admin/authorization-rules/get', async () => {
@@ -590,7 +593,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/admin/authorization-rules/get')
         .send({ id: ruleId })
         .expect(201);
-      expect(res.body.id).toBe(ruleId);
+      expect(res.body.data.id).toBe(ruleId);
     });
 
     it('POST /api/v1/admin/authorization-rules/update', async () => {
@@ -598,7 +601,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/admin/authorization-rules/update')
         .send({ id: ruleId, threshold: '750000.00', changeReason: 'Policy update' })
         .expect(201);
-      expect(res.body.version).toBe(2);
+      expect(res.body.data.version).toBe(2);
     });
 
     it('POST /api/v1/admin/authorization-rules/history', async () => {
@@ -606,7 +609,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/admin/authorization-rules/history')
         .send({ id: ruleId })
         .expect(201);
-      expect(res.body.length).toBeGreaterThanOrEqual(2);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(2);
     });
 
     it('rejects BANK_ADMIN from creating a rule (superadmin-only)', async () => {
@@ -635,7 +638,7 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/admin/authorization-rules/deactivate')
         .send({ id: ruleId })
         .expect(201);
-      expect(res.body.deactivated).toBe(true);
+      expect(res.body.data.deactivated).toBe(true);
 
       await authedRequest(app)
         .post('/api/v1/admin/authorization-rules/get')
@@ -647,7 +650,7 @@ describe('All API endpoints (e2e)', () => {
   describe('Admin — Reporting', () => {
     it('GET /api/v1/admin/reporting', async () => {
       const res = await authedRequest(app).get('/api/v1/admin/reporting').expect(200);
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
     });
   });
 
@@ -660,20 +663,20 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/bill-payment/biller')
         .send({ billerCode, billerName: 'Test Electricity Board', category: 'ELECTRICITY' })
         .expect(201);
-      expect(res.body.billerCode).toBe(billerCode);
-      billerId = res.body.id;
+      expect(res.body.data.billerCode).toBe(billerCode);
+      billerId = res.body.data.id;
     });
 
     it('GET /api/v1/bill-payment/biller', async () => {
       const res = await authedRequest(app).get('/api/v1/bill-payment/biller').expect(200);
-      expect(res.body.some((b: { id: string }) => b.id === billerId)).toBe(true);
+      expect(res.body.data.some((b: { id: string }) => b.id === billerId)).toBe(true);
     });
 
     it('GET /api/v1/bill-payment/biller/:id', async () => {
       const res = await authedRequest(app)
         .get(`/api/v1/bill-payment/biller/${billerId}`)
         .expect(200);
-      expect(res.body.id).toBe(billerId);
+      expect(res.body.data.id).toBe(billerId);
     });
   });
 
@@ -715,8 +718,8 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/bill-payment/bill/fetch')
         .send({ billerCode, consumerNumber, registeredMobile })
         .expect(201);
-      expect(Number(res.body.amount)).toBe(1500.5);
-      expect(res.body.status).toBe('UNPAID');
+      expect(Number(res.body.data.amount)).toBe(1500.5);
+      expect(res.body.data.status).toBe('UNPAID');
     });
 
     it('POST /api/v1/bill-payment/bill/fetch returns 404 for an unknown bill', async () => {
@@ -794,10 +797,10 @@ describe('All API endpoints (e2e)', () => {
         })
         .expect(201);
 
-      expect(res.body.status).toBe('SUCCESS');
-      expect(res.body.bbpsReferenceId).toBe('TEST-BBPS-REF-1');
+      expect(res.body.data.status).toBe('SUCCESS');
+      expect(res.body.data.bbpsReferenceId).toBe('TEST-BBPS-REF-1');
       expect(mockBbpsAdapter.pay).toHaveBeenCalledTimes(1);
-      paymentId = res.body.paymentId;
+      paymentId = res.body.data.paymentId;
 
       const bill = await mockBillRepo.findOne({ where: { billerCode, consumerNumber } });
       expect(bill?.status).toBe('PAID');
@@ -837,14 +840,14 @@ describe('All API endpoints (e2e)', () => {
         .post('/api/v1/bill-payment/payment')
         .send(body)
         .expect(201);
-      expect(first.body.duplicate).toBeFalsy();
+      expect(first.body.data.duplicate).toBeFalsy();
 
       const second = await authedRequest(app)
         .post('/api/v1/bill-payment/payment')
         .send(body)
         .expect(201);
-      expect(second.body.duplicate).toBe(true);
-      expect(second.body.paymentId).toBe(first.body.paymentId);
+      expect(second.body.data.duplicate).toBe(true);
+      expect(second.body.data.paymentId).toBe(first.body.data.paymentId);
       expect(mockBbpsAdapter.pay).toHaveBeenCalledTimes(1);
     });
 
@@ -865,15 +868,15 @@ describe('All API endpoints (e2e)', () => {
 
     it('GET /api/v1/bill-payment/payment', async () => {
       const res = await authedRequest(app).get('/api/v1/bill-payment/payment').expect(200);
-      expect(res.body.some((p: { id: string }) => p.id === paymentId)).toBe(true);
+      expect(res.body.data.some((p: { id: string }) => p.id === paymentId)).toBe(true);
     });
 
     it('GET /api/v1/bill-payment/payment/:id', async () => {
       const res = await authedRequest(app)
         .get(`/api/v1/bill-payment/payment/${paymentId}`)
         .expect(200);
-      expect(res.body.id).toBe(paymentId);
-      expect(res.body.billerCode).toBe(listedBillerCode);
+      expect(res.body.data.id).toBe(paymentId);
+      expect(res.body.data.billerCode).toBe(listedBillerCode);
     });
   });
 });

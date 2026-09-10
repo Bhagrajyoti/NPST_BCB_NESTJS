@@ -1,3 +1,7 @@
+// Must run before AppModule is imported below: app.module.ts reads process.env.AUTH_MOCK_MODE
+// at module-decoration time (synchronously, on import) to pick its guards, which is earlier
+// than @nestjs/config's ConfigModule.forRoot() would otherwise load the .env file.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';

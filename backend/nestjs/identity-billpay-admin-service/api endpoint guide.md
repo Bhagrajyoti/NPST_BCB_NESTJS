@@ -1,253 +1,460 @@
-# Auth Service — API Endpoint Guide
+# Auth Module
 
-Base URL: `http://<host>:<port>/api/v1` (global prefix set in [main.ts](src/main.ts)).
-Swagger UI: `http://<host>:<port>/api/v1/docs`.
+API & Technical Documentation
 
-Every endpoint in this guide is **POST**, accepts a JSON body, and is validated by a global
-`ValidationPipe({ whitelist: true, transform: true })` — unknown fields are stripped, and a
-missing/invalid required field returns `400 Bad Request`.
+Related guides: [adminservice.md](adminservice.md) (`/admin/*`), [rbacservice.md](rbacservice.md)
+(`/employees`, `/roles`, ...), [billpaymentservice.md](billpaymentservice.md) (`/bill-payment/*`),
+[mock-testing-guide.md](mock-testing-guide.md) (local/offline testing without a real Keycloak
+server).
 
-## 0. Conventions used below
+## 1. Overview
 
-- **Auth** column: `Public` = no token needed. `Bearer` = needs `Authorization: Bearer <accessToken>`
-  from `POST /auth/login`. `Bearer + role` = needs a token whose Keycloak realm roles include one
-  of the listed roles (enforced by the global AuthGuard/RoleGuard via the
-  [`@Auth()`](src/common/decorators/auth.decorator.ts) decorator).
-- **Success responses** are returned as-is from the controller (the global
-  [`ResponseTransformInterceptor`](src/common/interceptors/response-transform.interceptor.ts) is a
-  pass-through) — no `{ data: ... }` envelope.
-- **Error responses** (any thrown `HttpException`) are normalized by the global
-  [`HttpExceptionFilter`](src/common/filters/http-exception.filter.ts) to:
-  ```json
-  { "statusCode": 401, "path": "/api/v1/auth/login", "timestamp": "2026-09-10T...", "message": "Invalid credentials" }
-  ```
-- Two Keycloak clients exist — pass the right one as `clientId` on login/logout:
-  - `mobile-app` — retail/corporate **customer** mobile app.
-  - `admin-web` — bank staff **admin portal** (default if `clientId` is omitted).
-- In Swagger's Authorize dialog, paste only the raw `accessToken` value (no `Bearer ` prefix) —
-  the [`normalizeBearerMiddleware`](src/common/middleware/normalize-bearer.middleware.ts) will
-  strip a duplicated `Bearer` if you paste it anyway, but a raw token is what the docs expect.
+The Auth module provides token issuance (`POST /auth/login`/`/auth/logout`/`/auth/me`), a
+five-step resumable customer-onboarding saga (registration → OTP → credentials/Keycloak user →
+device → complete), standalone OTP generation/verification, customer MPIN credential management,
+device registration, and corporate-hierarchy role linking. Keycloak is the system of record for
+login identity; MySQL persists everything else (OTP challenges, MPIN hashes, device profiles,
+registration-attempt state).
 
----
+Module: [src/modules/auth](src/modules/auth) ([auth.module.ts](src/modules/auth/auth.module.ts)).
 
-## 1. The two end-to-end flows
-
-### Flow A — Existing user login (admin staff or an already-onboarded customer)
+## 2. API Base URL
 
 ```
-POST /auth/login  →  { accessToken, refreshToken, ... }
-        │
-        ▼ (Authorization: Bearer <accessToken> on every call below)
-POST /auth/me  →  decoded JWT claims (sub, roles, etc.)
-        │
-        ▼ use `sub` as the userId/keycloakUserId input to other endpoints
-POST /auth/credential/get | /auth/device/list | /auth/corporate-hierarchy/list  ...
-        │
-        ▼ when finished
-POST /auth/logout  (send back the refreshToken from step 1)
+http://localhost:3000/api/v1
+```
+Swagger: `http://localhost:3000/api/v1/docs`
+
+Every endpoint in this module is **POST**. Protected routes need:
+```
+Authorization: Bearer <accessToken>
+```
+`<accessToken>` is the literal value from `POST /auth/login` (§3) — never invent one. Locally
+(`AUTH_MOCK_MODE=true`), `Authorization: Bearer mock-mock-admin-token` works — see
+[mock-testing-guide.md](mock-testing-guide.md).
+
+Every success response is wrapped:
+```json
+{ "success": true, "data": { /* shown below */ }, "timestamp": "2026-09-10T..." }
+```
+Error responses are **not** wrapped:
+```json
+{ "statusCode": 401, "path": "/api/v1/auth/login", "timestamp": "...", "message": "Invalid user credentials" }
+```
+A global `ValidationPipe({ whitelist: true, transform: true })` strips unknown body fields and
+returns `400` for a missing/invalid required field.
+
+Two Keycloak clients exist — pass the right one as `clientId` on login/logout:
+`mobile-app` (retail/corporate customer) or `admin-web` (bank staff, default if omitted).
+
+## 3. Token API
+
+**`POST`** `/auth/login` — Public.
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| username | String | Yes | Keycloak login id (not email) |
+| password | String | Yes | |
+| clientId | String | No | `"admin-web"` (default) or `"mobile-app"` |
+
+### Request
+```json
+{ "username": "mock-admin", "password": "Mock@123", "clientId": "admin-web" }
 ```
 
-### Flow B — New customer onboarding (mobile app)
+### Success Response
+```json
+{
+  "accessToken": "mock-mock-admin-token",
+  "expiresIn": 86400,
+  "refreshExpiresIn": 172800,
+  "refreshToken": "mock-mock-admin-refresh",
+  "tokenType": "Bearer",
+  "scope": "openid profile email"
+}
+```
+(Real-Keycloak responses have JWT-shaped `accessToken`/`refreshToken` and `expiresIn: 300`
+instead — the shape is identical either way.)
+
+**What to use, and where:** `accessToken` → `Authorization: Bearer <accessToken>` on every
+protected call below. `refreshToken` → body of `POST /auth/logout`.
+
+**Errors:** `401` bad credentials or Keycloak unreachable.
+
+**`POST`** `/auth/logout` — Bearer required.
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| refreshToken | String | Yes | From `login`'s response |
+| clientId | String | No | Must match the one used at login |
+
+### Success Response
+```json
+{ "loggedOut": true }
+```
+**Errors:** `401` invalid/expired refresh token.
+
+**`POST`** `/auth/me` — Bearer required, no body.
+
+### Success Response
+```json
+{ "user": { "sub": "00000000-0000-0000-0000-000000000002", "preferred_username": "mock-admin", "realm_access": { "roles": ["BANK_ADMIN"] } } }
+```
+**What to use, and where:** `user.sub` → `userId`/`keycloakUserId` input elsewhere
+(`/auth/credential/*`, `/auth/device/*`, `/auth/corporate-hierarchy/*`). `user.realm_access.roles`
+→ which UI/actions to show.
+
+## 4. Registration API (Customer Onboarding Saga)
+
+A real, resumable saga — every step persists `RegistrationAttempt.currentStep`. If the app
+crashes mid-onboarding, `resume` tells the client exactly which call is next; if a step's external
+side effect fails partway, the attempt is compensated and left retryable at the same step.
 
 ```
-POST /auth/registration/create   (Public)
-   in:  mobileNumber, panOrCif
-   out: { id, mobileNumber, panOrCif, currentStep: "INIT", ... }
-        │  keep `id` as attemptId for the rest of onboarding
-        ▼
-POST /auth/otp/create             (Public)
-   in:  mobileNumber
-   out: { id, mobileNumber, otpHash, expiresAt, otp, ... }
-        │  `id` = challengeId, `otp` = the code to show/send to the customer (dev-only field)
-        ▼  (OTP verification against Keycloak/user-creation is not yet wired to a route —
-        ▼   see §2.2 note. Once verified, an admin/back-office flow creates the Keycloak user.)
-POST /auth/credential/create      (Bearer — see note below)
-   in:  userId (Keycloak sub of the new user), mpin and/or password
-   out: { keycloakUserId, passwordUpdated, mpin: { id, hasMpin, lastRotatedAt, ... } }
-        │
-        ▼
-POST /auth/device/create          (Bearer)
-   in:  userId, deviceId, deviceModel?
-   out: { id, userId, deviceId, deviceModel, trusted: false, ... }
-        │
-        ▼  from here on the customer behaves like Flow A:
-POST /auth/login  (clientId: "mobile-app")  →  POST /auth/me  →  ... →  POST /auth/logout
+create → verify-otp → create-credentials → register-device → complete
+(INIT)   (OTP_VERIFIED)  (KEYCLOAK_USER_CREATED)  (DEVICE_REGISTERED)  (COMPLETED)
 ```
 
-> **Note on `/auth/credential/*` and `/auth/otp/*`:** the DTOs `VerifyOtpDto`
-> ([verify-otp.dto.ts](src/modules/auth/otp/dto/verify-otp.dto.ts)) and `CreateCredentialsDto`
-> ([create-credentials.dto.ts](src/modules/auth/registration/dto/create-credentials.dto.ts)) exist
-> in the codebase but are **not currently bound to any controller route** — the registration saga
-> (`RegistrationStep` enum in
-> [registration-orchestrator.service.ts](src/modules/auth/registration/registration-orchestrator.service.ts))
-> defines `OTP_VERIFIED` / `CREDENTIALS_SET` / `DEVICE_REGISTERED` / `KEYCLOAK_USER_CREATED` steps
-> that aren't yet reachable over HTTP. Today, `/auth/credential/create` is called directly once a
-> Keycloak user already exists (e.g. created by an admin) and requires a Bearer token.
+**`POST`** `/auth/registration/create` — Public.
 
----
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| mobileNumber | String | Yes | 10-digit Indian mobile number |
+| panOrCif | String | Yes | PAN or CIF (not format-validated — both are legal) |
 
-## 2. Endpoint reference
+### Success Response
+```json
+{ "id": "86988822-9349-4101-b836-d4e3c0343fca", "mobileNumber": "9876543210", "panOrCif": "CIF99999", "currentStep": "INIT", "keycloakUserId": null, "deviceProfileId": null, "failureReason": null, "createdAt": "...", "updatedAt": "...", "deletedAt": null }
+```
+**What to use, and where:** `id` → `attemptId` for every call below.
 
-### 2.1 Token — [auth.controller.ts](src/modules/auth/token/auth.controller.ts) (`/auth`)
+**`POST`** `/auth/registration/resume` — Public.
 
-#### `POST /auth/login`
-| | |
-|---|---|
-| Auth | Public |
-| Input (`LoginDto`) | `username` (string, required) — Keycloak login, not email.<br>`password` (string, required).<br>`clientId` (`"admin-web"` \| `"mobile-app"`, optional, default `admin-web`). |
-| Output (`TokenResponseDto`) | `accessToken`, `expiresIn` (sec), `refreshExpiresIn` (sec), `refreshToken`, `tokenType` (`Bearer`), `scope`. |
-| Where the output goes | `accessToken` → `Authorization: Bearer <accessToken>` header on every subsequent protected call (`/auth/me`, `/auth/credential/*`, `/auth/device/*`, `/auth/corporate-hierarchy/*`, `/auth/logout` uses the refresh token instead). `refreshToken` → body of `POST /auth/logout`. Nothing else consumes `expiresIn`/`refreshExpiresIn`/`scope` server-side; they're informational for the caller (e.g. to know when to re-login). |
-| Example request | `{ "username": "corp-maker-01", "password": "corp-maker-01", "clientId": "admin-web" }` |
-| Errors | `401` — bad credentials or Keycloak unreachable. |
+### Request
+```json
+{ "id": "86988822-9349-4101-b836-d4e3c0343fca" }
+```
 
-Under the hood: [`KeycloakService.login`](src/modules/auth/keycloak/keycloak.service.ts) POSTs a
-`grant_type=password` request to Keycloak's `/realms/<realm>/protocol/openid-connect/token`.
+### Success Response
+```json
+{ "attemptId": "86988822-9349-4101-b836-d4e3c0343fca", "currentStep": "INIT", "nextAction": "POST /auth/otp/create then /auth/registration/verify-otp" }
+```
+Call this any time — `nextAction` names the exact next endpoint per current `currentStep`.
 
-#### `POST /auth/logout`
-| | |
-|---|---|
-| Auth | Bearer |
-| Input (`LogoutDto`) | `refreshToken` (string, required) — the `refreshToken` from login.<br>`clientId` (optional, must match the one used at login). |
-| Output | `{ "loggedOut": true }` |
-| Where the input comes from | `refreshToken` is the value saved from the `POST /auth/login` response — nowhere else. |
-| Errors | `401` — invalid/expired refresh token. |
+**`POST`** `/auth/registration/verify-otp` — Public. (Get `challengeId`/`otp` from `POST /auth/otp/create`, §5, first.)
 
-Calls Keycloak's `/protocol/openid-connect/logout` to revoke the refresh token (ends the SSO session).
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| attemptId | String (UUID) | Yes | |
+| challengeId | String (UUID) | Yes | From `/auth/otp/create` |
+| otp | String (6 digits) | Yes | |
 
-#### `POST /auth/me`
-| | |
-|---|---|
-| Auth | Bearer |
-| Input | none (identity comes entirely from the Bearer token). |
-| Output | `{ "user": { sub, preferred_username, realm_access: { roles: [...] }, ... } }` — the decoded JWT claims. |
-| Where the output goes | `user.sub` is the Keycloak **user ID** used as `userId` / `keycloakUserId` input elsewhere: `SetCredentialDto.userId`, `GetCredentialDto.userId`, `RegisterDeviceDto.userId`, `SetHierarchyRoleDto.userId`. `user.realm_access.roles` tells the client which UI/actions to show (e.g. whether the user is `CORPORATE_MAKER` vs `CORPORATE_CHECKER`). |
-| Errors | `401` — missing/invalid token. |
+### Success Response
+Attempt row with `currentStep: "OTP_VERIFIED"`.
+**Errors:** `404` unknown challenge · `400` wrong/expired OTP, or attempt not at `INIT` · `403`
+challenge locked after too many wrong attempts.
 
----
+**`POST`** `/auth/registration/create-credentials` — Public.
 
-### 2.2 Registration — [registration.controller.ts](src/modules/auth/registration/registration.controller.ts) (`/auth/registration`)
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| attemptId | String (UUID) | Yes | |
+| password | String (8–128 chars) | Yes | Becomes the customer's real Keycloak login password |
 
-#### `POST /auth/registration/create`
-| | |
-|---|---|
-| Auth | Public — first call in customer onboarding, before any account exists. |
-| Input (`InitRegistrationDto`) | `mobileNumber` (string, required), `panOrCif` (string, required). |
-| Output | The saved `RegistrationAttempt` row: `{ id, mobileNumber, panOrCif, currentStep: "INIT", createdAt, updatedAt, deletedAt, failureReason }`. |
-| Where the output goes | `id` is the **registration attempt ID** — hold onto it client-side to resume/reference this onboarding attempt (e.g. for admin lookup via `/auth/registration/get`). |
+### Success Response
+```json
+{ "id": "86988822-...", "currentStep": "KEYCLOAK_USER_CREATED", "keycloakUserId": "984de13d-b61a-4ec1-9c0f-7b5b94ddd191", "mobileNumber": "9876543210", "...": "..." }
+```
+Creates the customer's **real Keycloak account** (username = `mobileNumber`, role
+`RETAIL_CUSTOMER`) right here. Verified live end to end, including logging in afterwards with
+`username: mobileNumber`, the `password` sent here, and `clientId: "mobile-app"` against the real
+Keycloak server.
 
-#### `POST /auth/registration/get`
-| Auth | Bearer (admin portal — review tool). |
-| Input (`IdRequestDto`) | `id` (UUID) — the attempt ID from `create`. |
-| Output | The full `RegistrationAttempt` row, or `404` if not found. |
+**Errors:** `400` — attempt not at `OTP_VERIFIED` (or `CREDENTIALS_SET`, meaning "retry a
+previously failed attempt" — call this again with the same `attemptId`; a Keycloak failure here
+rolls the attempt back to `CREDENTIALS_SET`, not further, so retrying is exactly this same call).
 
-#### `POST /auth/registration/list`
-| Auth | Bearer (admin portal). |
-| Input | none. |
-| Output | Array of all (non-deleted) `RegistrationAttempt` rows. |
+**`POST`** `/auth/registration/register-device` — Public.
 
-#### `POST /auth/registration/delete`
-| Auth | Bearer (admin portal). |
-| Input (`IdRequestDto`) | `id`. |
-| Output | `{ id, deleted: true }` — soft delete (`deletedAt` set; row retained). |
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| attemptId | String (UUID) | Yes | |
+| deviceId | String | Yes | IMEI/UUID |
+| deviceModel | String | No | |
 
----
+### Success Response
+Attempt row with `currentStep: "DEVICE_REGISTERED"`. **Errors:** `400` — attempt not at
+`KEYCLOAK_USER_CREATED`.
 
-### 2.3 OTP — [otp.controller.ts](src/modules/auth/otp/otp.controller.ts) (`/auth/otp`)
+**`POST`** `/auth/registration/complete` — Public.
 
-#### `POST /auth/otp/create`
-| | |
-|---|---|
-| Auth | Public. |
-| Input (`GenerateOtpDto`) | `mobileNumber` (string, required). |
-| Output | `{ id, mobileNumber, otpHash, attemptCount: 0, expiresAt, otp, createdAt, ... }` — `otp` is the **plaintext 6-digit code** (dev-only; the comment in the controller flags this should be removed/sent via SMS instead of returned in production). |
-| Where the output goes | `id` (as `challengeId`) and the `otp` value are what a real client would pass to an OTP-verification step. As noted in §1, that verification route isn't wired yet — today the plaintext `otp` in the response is the only way to know the code (normally it would be sent by SMS and never returned in the API response). `otpHash` is what's persisted for server-side comparison once verification exists. |
+### Request
+```json
+{ "id": "86988822-9349-4101-b836-d4e3c0343fca" }
+```
 
-#### `POST /auth/otp/get`
-| Auth | Bearer (admin/support). |
-| Input (`IdRequestDto`) | `id`. |
-| Output | The `OtpChallenge` row (includes `otpHash`, not the plaintext code). |
+### Success Response
+```json
+{ "attemptId": "86988822-9349-4101-b836-d4e3c0343fca", "keycloakUserId": "984de13d-b61a-4ec1-9c0f-7b5b94ddd191", "status": "COMPLETED" }
+```
+**Errors:** `400` — attempt not at `DEVICE_REGISTERED`.
 
-#### `POST /auth/otp/list`
-| Auth | Bearer (admin/support). |
-| Output | Array of all `OtpChallenge` rows. |
+**`POST`** `/auth/registration/list` / **`get`** / **`delete`** — Bearer (admin review). `get`/`delete`
+take `{ "id": "<attemptId>" }`; `delete` soft-deletes (`{ id, deleted: true }`).
 
-#### `POST /auth/otp/delete`
-| Auth | Bearer. |
-| Input (`IdRequestDto`) | `id`. |
-| Output | `{ id, deleted: true }`. |
+## 5. OTP API
 
----
+**`POST`** `/auth/otp/create` — Public **and requires an `Idempotency-Key` header** (any unique
+client-generated string — prevents a client retry from sending a second SMS for the same request).
 
-### 2.4 Credential (customer MPIN) — [credential.controller.ts](src/modules/auth/credential/credential.controller.ts) (`/auth/credential`)
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| mobileNumber | String | Yes | 10-digit Indian mobile number |
 
-All routes require Bearer (the whole controller is decorated `@Auth()`).
+### Success Response
+```json
+{ "id": "bdf158ef-16b2-4b53-afd1-e473adb4c577", "mobileNumber": "9876543210", "otpHash": "fdee68...", "attemptCount": 0, "lockedUntil": null, "expiresAt": "2026-09-10T04:59:43.715Z", "otp": "916778", "createdAt": "...", "updatedAt": "...", "deletedAt": null }
+```
+`otp` is the plaintext 6-digit code (dev-only — in production this would be sent via SMS and
+never returned here).
 
-#### `POST /auth/credential/create`
-| | |
-|---|---|
-| Input (`SetCredentialDto`) | `userId` (UUID, required) — the customer's Keycloak `sub` (from `/auth/me`).<br>`password` (string, 8–128 chars) — required only if `mpin` is omitted; written to **Keycloak only**.<br>`mpin` (string, 4–6 chars) — required only if `password` is omitted; hashed with [`hashMpin`](src/modules/auth/credential/utils/mpin-hash.util.ts) and stored **locally only**, never in Keycloak. |
-| Output | `{ keycloakUserId, passwordUpdated: boolean, mpin: { id, keycloakUserId, hasMpin: true, lastRotatedAt, createdAt, updatedAt } | null }`. |
-| Where input/output connect | `userId` normally comes from `POST /auth/me`'s `sub` for the currently-onboarding customer. If `password` is set, it flows straight into [`KeycloakService.resetUserPassword`](src/modules/auth/keycloak/keycloak.service.ts) (used to log in later via `/auth/login`). The returned `mpin.id` is the local credential record ID surfaced back to admin tooling (e.g. `/auth/credential/list`); the raw MPIN is never returned. |
+**What to use, and where:** `id` (as `challengeId`) + `otp` → `POST /auth/otp/verify` or
+`POST /auth/registration/verify-otp`.
 
-#### `POST /auth/credential/get`
-| Input (`GetCredentialDto`) | `userId` (UUID, optional) — if omitted, uses the caller's own `sub` from the Bearer token. |
-| Output | The public view of that user's MPIN record (same shape as `create`'s `mpin` field), or `404` if none exists. |
-| Where it's used | Mobile app calls this with no body (self) to check "does this device's user already have an MPIN set" before showing a setup vs. unlock screen. |
+**Errors:** `400` missing `Idempotency-Key` header or invalid `mobileNumber` · `409`
+`Idempotency-Key` reused with a different `mobileNumber`.
 
-#### `POST /auth/credential/list`
-| Auth | Bearer (intended for admin/support use — not exposed to customers in the mobile app). |
-| Output | Array of all customers' MPIN metadata (no secrets — `hashedMpin` is never returned). |
+**`POST`** `/auth/otp/verify` — Public (this is how identity is proven *before* any token exists).
 
-#### `POST /auth/credential/delete`
-| Input (`GetCredentialDto`) | `userId` (optional, defaults to caller's own `sub`). |
-| Output | `{ keycloakUserId, deleted: true }` — soft-deletes the local MPIN row only; does **not** touch the Keycloak password. Used for a mobile app "forgot MPIN, set a new one" flow (delete then `create` again).
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| challengeId | String (UUID) | Yes | |
+| otp | String (6 digits) | Yes | |
 
----
+### Success Response
+```json
+{ "verified": true, "mobileNumber": "9876543210" }
+```
+One-time use — a correct code invalidates the challenge; replaying `challengeId` afterwards
+returns `404`/`400`.
 
-### 2.5 Device — [device.controller.ts](src/modules/auth/device/device.controller.ts) (`/auth/device`)
+**Errors:** `404` unknown challenge · `400` invalid/expired OTP · `403` too many wrong attempts
+(`OTP_MAX_ATTEMPTS` in `.env`, default 5 — challenge then locked for `OTP_LOCK_MINUTES`, default
+15).
+
+**`POST`** `/auth/otp/list` / **`get`** / **`delete`** — Bearer (admin/support). Same
+`{ id }` → row/array/`{ id, deleted: true }` pattern.
+
+## 6. Credential API (Customer MPIN)
+
+All routes require Bearer. `create`/`get`/`verify`/`delete` also run an ownership check: if the
+body's `userId` differs from the caller's own token `sub`, the caller must hold
+`BANK_ADMIN`/`BANK_SUPER_ADMIN`, else `403`. Omitting `userId` always means "myself."
+
+**`POST`** `/auth/credential/create`
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| userId | String (UUID) | Yes | Customer's Keycloak `sub` |
+| password | String (8–128) | One of password/mpin | Written to **Keycloak only** |
+| mpin | String (4–6) | One of password/mpin | Hashed (scrypt) and stored **locally only**, never in Keycloak |
+
+### Success Response
+```json
+{ "keycloakUserId": "984de13d-...", "passwordUpdated": true, "mpin": { "id": "...", "keycloakUserId": "...", "hasMpin": true, "lastRotatedAt": "...", "createdAt": "...", "updatedAt": "..." } }
+```
+(`mpin` is `null` if only `password` was set.)
+
+**`POST`** `/auth/credential/verify`
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| userId | String (UUID) | No | Defaults to caller's own `sub` |
+| mpin | String (4–6) | Yes | |
+
+### Success Response
+```json
+{ "verified": true }
+```
+
+**`POST`** `/auth/credential/get` — `{ userId? }` → MPIN metadata (`404` if none exists).
+**`POST`** `/auth/credential/delete` — `{ userId? }` → `{ keycloakUserId, deleted: true }` (local
+MPIN row only; does not touch the Keycloak password).
+**`POST`** `/auth/credential/list` — Bearer, admin/support — array of all customers' MPIN metadata
+(no secrets returned).
+
+## 7. Device API
 
 All routes require Bearer.
 
-#### `POST /auth/device/create`
-| Input (`RegisterDeviceDto`) | `userId` (string, required) — Keycloak `sub` of the owning user.<br>`deviceId` (string, required) — IMEI/UUID identifying the physical device.<br>`deviceModel` (string, optional) — e.g. `"Samsung Galaxy S24"`. |
-| Output | The saved `DeviceProfile` row: `{ id, userId, deviceId, deviceModel, trusted: false, createdAt, ... }`. New devices always start `trusted: false`. |
-| Where it's used | Called once per device during mobile onboarding/first login. Later requests from the app can be cross-checked against `deviceId` for trusted-device / step-up-auth decisions (that check isn't implemented in this controller — it only stores the profile). |
+**`POST`** `/auth/device/create`
 
-#### `POST /auth/device/get` / `POST /auth/device/list` / `POST /auth/device/delete`
-Same `IdRequestDto` (`{ id }`) → row / array / `{ id, deleted: true }` pattern as registration and OTP above.
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| userId | String | Yes | Keycloak `sub` of the owning user |
+| deviceId | String | Yes | IMEI/UUID |
+| deviceModel | String | No | e.g. `"Samsung Galaxy S24"` |
 
----
+### Success Response
+```json
+{ "id": "c7c7b651-9afa-45e9-aa36-2b1049f3fb90", "userId": "...", "deviceId": "device-abc-999", "deviceModel": "Pixel 9", "trusted": false, "createdAt": "...", "updatedAt": "..." }
+```
+New devices always start `trusted: false`.
 
-### 2.6 Corporate Hierarchy — [corporate-hierarchy.controller.ts](src/modules/auth/corporate-hierarchy/corporate-hierarchy.controller.ts) (`/auth/corporate-hierarchy`)
+**`POST`** `/auth/device/list` / **`get`** / **`delete`** — same `{ id }` pattern as other modules.
 
-All routes require Bearer. This is an **admin/back-office** endpoint set for wiring a corporate
-customer's Keycloak user into a maker-checker role for a specific CIF (corporate account).
+## 8. Corporate Hierarchy API
 
-#### `POST /auth/corporate-hierarchy/create`
-| Input (`SetHierarchyRoleDto`) | `userId` (string, required) — Keycloak user ID being assigned a role.<br>`cif` (string, required) — the corporate CIF this role applies to.<br>`role` (string, required, one of `CORPORATE_IT_ADMIN`, `CORPORATE_MAKER`, `CORPORATE_CHECKER`, `CORPORATE_VIEWER`, `BANK_SUPER_ADMIN`, `BANK_ADMIN`, `BANK_MAKER`, `BANK_CHECKER`, `RETAIL_CUSTOMER`). |
-| Output | The saved `CorporateHierarchy` row: `{ id, userId, cif, role, approvalLimit: null, createdAt, ... }`. |
-| Where it's used | `userId` typically comes from an existing `/auth/me` lookup (or from `/auth/registration` records) for the customer being provisioned. Once assigned, that `role` string is what shows up inside the user's JWT `realm_access.roles` on their **next** `/auth/login` — and is what `@Auth('CORPORATE_MAKER', 'CORPORATE_CHECKER')`-style route guards check against on other services' controllers. `approvalLimit` is stored for future use (not set by this DTO) but isn't populated by any endpoint yet. |
+All routes require Bearer. Links a corporate customer's Keycloak user to a maker/checker role for
+a specific CIF.
 
-#### `POST /auth/corporate-hierarchy/get` / `.../list` / `.../delete`
-Same `IdRequestDto` pattern as above.
+**`POST`** `/auth/corporate-hierarchy/create`
 
----
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| userId | String | Yes | Keycloak user id |
+| cif | String | Yes | Corporate CIF |
+| role | String | Yes | One of `CORPORATE_IT_ADMIN`, `CORPORATE_MAKER`, `CORPORATE_CHECKER`, `CORPORATE_VIEWER`, `BANK_SUPER_ADMIN`, `BANK_ADMIN`, `BANK_MAKER`, `BANK_CHECKER`, `RETAIL_CUSTOMER` |
 
-## 3. Quick reference table
+### Success Response
+```json
+{ "id": "...", "userId": "...", "cif": "CIF12345", "role": "CORPORATE_MAKER", "approvalLimit": null, "createdAt": "...", "updatedAt": "..." }
+```
+`role` appears in the user's `realm_access.roles` on their **next** login. `approvalLimit` is
+reserved for future use — no endpoint currently sets it.
 
-| Method & Path | Auth | Key input | Key output | Consumed by |
-|---|---|---|---|---|
-| `POST /auth/login` | Public | `username`, `password`, `clientId?` | `accessToken`, `refreshToken` | `accessToken` → `Authorization` header everywhere below; `refreshToken` → `/auth/logout` |
-| `POST /auth/logout` | Bearer | `refreshToken` | `{ loggedOut }` | end of session |
-| `POST /auth/me` | Bearer | — | `user.sub`, `user.realm_access.roles` | `sub` → `userId`/`keycloakUserId` on credential/device/hierarchy calls |
-| `POST /auth/registration/create` | Public | `mobileNumber`, `panOrCif` | `id` (attemptId), `currentStep` | `id` → `/auth/registration/get` |
-| `POST /auth/registration/get\|list\|delete` | Bearer | `id` / — | attempt row(s) | admin review |
-| `POST /auth/otp/create` | Public | `mobileNumber` | `id` (challengeId), `otp` | intended for a not-yet-built verify step |
-| `POST /auth/otp/get\|list\|delete` | Bearer | `id` / — | challenge row(s) | admin/support |
-| `POST /auth/credential/create` | Bearer | `userId`, `password?`, `mpin?` | `mpin.id`, `passwordUpdated` | `password` → Keycloak login; `mpin` → local MPIN unlock |
-| `POST /auth/credential/get\|delete` | Bearer | `userId?` | MPIN metadata / `{ deleted }` | mobile app MPIN-set check / reset flow |
-| `POST /auth/credential/list` | Bearer | — | all customers' MPIN metadata | admin/support |
-| `POST /auth/device/create` | Bearer | `userId`, `deviceId`, `deviceModel?` | device row (`trusted: false`) | trusted-device checks (future) |
-| `POST /auth/device/get\|list\|delete` | Bearer | `id` / — | device row(s) | admin/support |
-| `POST /auth/corporate-hierarchy/create` | Bearer | `userId`, `cif`, `role` | hierarchy row | `role` appears in the user's next login JWT → drives `@Auth(role)` guards elsewhere |
-| `POST /auth/corporate-hierarchy/get\|list\|delete` | Bearer | `id` / — | hierarchy row(s) | admin/support |
+**`POST`** `/auth/corporate-hierarchy/list` / **`get`** / **`delete`** — same `{ id }` pattern.
+
+## 9. Database Tables
+
+**`registration_attempt`**
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| mobile_number | VARCHAR | |
+| pan_or_cif | VARCHAR | |
+| current_step | VARCHAR, default `INIT` | Saga state machine position |
+| failure_reason | VARCHAR(500), nullable | Set by `RegistrationOrchestratorService.fail()` |
+| keycloak_user_id | VARCHAR(36), nullable | Set once `create-credentials` succeeds |
+| device_profile_id | VARCHAR(36), nullable | Set once `register-device` succeeds |
+| created_at / updated_at / deleted_at | TIMESTAMP | |
+
+**`otp_challenge`**
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| mobile_number | VARCHAR | |
+| otp_hash | VARCHAR | SHA-256 of the code, never the plaintext |
+| attempt_count | INT, default 0 | |
+| locked_until | TIMESTAMP, nullable | Set once `attempt_count` ≥ `OTP_MAX_ATTEMPTS` |
+| expires_at | TIMESTAMP | |
+| created_at / updated_at / deleted_at | TIMESTAMP | |
+
+**`credential`**
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| user_id | VARCHAR | Keycloak `sub` (column name; entity property `keycloakUserId`) |
+| password_hash | VARCHAR | scrypt hash of the **MPIN** (column name; entity property `hashedMpin` — login passwords are never stored here, only in Keycloak) |
+| last_rotated_at | TIMESTAMP, nullable | |
+| created_at / updated_at / deleted_at | TIMESTAMP | |
+
+**`device_profile`**
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| user_id | VARCHAR | |
+| device_id | VARCHAR | |
+| device_model | VARCHAR, nullable | |
+| trusted | BOOLEAN, default false | |
+| created_at / updated_at / deleted_at | TIMESTAMP | |
+
+**`corporate_hierarchy`**
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| user_id | VARCHAR | |
+| cif | VARCHAR | |
+| role | VARCHAR | |
+| approval_limit | DECIMAL(18,2), nullable | Reserved, unused |
+| created_at / updated_at / deleted_at | TIMESTAMP | |
+
+**`idempotency_record`** — backs the `Idempotency-Key` header on `POST /auth/otp/create`.
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| idempotency_key | VARCHAR, indexed | |
+| route | VARCHAR | e.g. `"POST /api/v1/auth/otp/create"` |
+| request_hash | VARCHAR | SHA-256 of the request body |
+| created_at | TIMESTAMP | |
+| — | unique on (`idempotency_key`, `route`) | |
+
+## 10. Registration Saga Flow
+
+```
+POST /auth/registration/create           (INIT)
+        │
+        ▼
+POST /auth/otp/create  →  POST /auth/registration/verify-otp   (OTP_VERIFIED)
+        │
+        ▼
+POST /auth/registration/create-credentials
+        │   creates real Keycloak user + role RETAIL_CUSTOMER   (KEYCLOAK_USER_CREATED)
+        │   failure → rolled back to CREDENTIALS_SET, retryable with the same call
+        ▼
+POST /auth/registration/register-device   (DEVICE_REGISTERED)
+        │
+        ▼
+POST /auth/registration/complete          (COMPLETED)
+        │
+        ▼
+POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from create-credentials)
+```
+
+## 11. Validation & Error Handling
+
+| Code / status | Where | Meaning |
+|---|---|---|
+| `401` | any protected route | missing/invalid Bearer token, or bad login credentials |
+| `403` | credential `*` | IDOR — `userId` differs from caller and caller isn't `BANK_ADMIN`/`BANK_SUPER_ADMIN` |
+| `403` | `otp/verify`, `registration/verify-otp` | challenge locked after too many wrong attempts |
+| `404` | `otp/*`, `registration/*`, `device/*`, `corporate-hierarchy/*` gets | unknown `id`/`challengeId` |
+| `400` | `otp/create` | missing `Idempotency-Key` header |
+| `409` | `otp/create` | `Idempotency-Key` reused with a different `mobileNumber` |
+| `400` | `registration/verify-otp\|create-credentials\|register-device\|complete` | wrong OTP, or attempt not at the required step |
+
+## 12. Testing Scenarios
+
+| Scenario | Expected Result | Verified |
+|---|---|---|
+| Valid login | `accessToken`/`refreshToken` returned | ✅ live |
+| Wrong password | `401` | ✅ live |
+| Full registration saga, step by step | Ends `COMPLETED`, real Keycloak user created | ✅ live end-to-end |
+| Log in as the customer created by the saga | `201`, real Keycloak-issued JWT | ✅ live, against real Keycloak |
+| `create-credentials` called out of order (before `verify-otp`) | `400` | ✅ (e2e test) |
+| `create-credentials` fails (Keycloak error injected) | `500`, attempt left at `CREDENTIALS_SET` with `failureReason` set, `keycloakUserId` still `null` | ✅ (e2e test) |
+| Retry `create-credentials` after the above failure | `201`, succeeds, advances to `KEYCLOAK_USER_CREATED` | ✅ (e2e test) |
+| OTP: correct code | `{ verified: true }`, challenge invalidated | ✅ (unit test) |
+| OTP: wrong code repeated past `OTP_MAX_ATTEMPTS` | `403`, locked for `OTP_LOCK_MINUTES` | ✅ (unit test) |
+| OTP: expired challenge | `400` even with the correct code | ✅ (unit test) |
+| `otp/create` without `Idempotency-Key` | `400` | ✅ (e2e test) |
+| Customer passes another customer's `userId` to `credential/get` | `403` (unless caller is `BANK_ADMIN`/`BANK_SUPER_ADMIN`) | ✅ (unit test) |
+
+## 13. Frontend Integration Note
+
+Generate a fresh `Idempotency-Key` per **new** `POST /auth/otp/create` request; reuse it only for
+a retry of that exact same request (dropped connection, timeout) — not for a new OTP send.
+Persist `attemptId` client-side through the whole registration saga; on app relaunch, call
+`POST /auth/registration/resume` with it before assuming onboarding needs to restart from scratch.

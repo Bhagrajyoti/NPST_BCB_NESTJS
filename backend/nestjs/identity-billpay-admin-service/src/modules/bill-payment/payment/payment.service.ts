@@ -9,8 +9,13 @@ import { Repository } from 'typeorm';
 
 import { BillPayment } from './entities/bill-payment.entity';
 import { MockBill } from '../bill/entities/mock-bill.entity';
+import { DemoBbpsData } from '../demo/entities/demo-bbps-data.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BbpsAdapter } from './adapter/bbps.adapter';
+
+type BillingRecord =
+  | { source: 'mock'; record: MockBill }
+  | { source: 'demo'; record: DemoBbpsData };
 
 @Injectable()
 export class PaymentService {
@@ -21,9 +26,31 @@ export class PaymentService {
     @InjectRepository(MockBill)
     private readonly mockBillRepository: Repository<MockBill>,
 
+    @InjectRepository(DemoBbpsData)
+    private readonly demoRepository: Repository<DemoBbpsData>,
+
     @Inject('BBPS_ADAPTER')
     private readonly bbpsAdapter: BbpsAdapter,
   ) {}
+
+  // demo_bbps_data is a fallback, checked only when billerCode+consumerNumber aren't in
+  // mock_bill — see demo/entities/demo-bbps-data.entity.ts for why it's a separate table.
+  private async findBillingRecord(
+    billerCode: string,
+    consumerNumber: string,
+  ): Promise<BillingRecord | null> {
+    const mock = await this.mockBillRepository.findOne({ where: { billerCode, consumerNumber } });
+    if (mock) {
+      return { source: 'mock', record: mock };
+    }
+
+    const demo = await this.demoRepository.findOne({ where: { billerCode, consumerNumber } });
+    if (demo) {
+      return { source: 'demo', record: demo };
+    }
+
+    return null;
+  }
 
   findAll() {
     return this.paymentRepository.find();
@@ -69,19 +96,16 @@ export class PaymentService {
 }
 
     // 1. Find bill
-    const bill = await this.mockBillRepository.findOne({
-      where: {
-        billerCode: dto.billerCode,
-        consumerNumber: dto.consumerNumber,
-      },
-    });
+    const found = await this.findBillingRecord(dto.billerCode, dto.consumerNumber);
 
-    if (!bill) {
+    if (!found) {
       throw new NotFoundException({
         code: 'BILL_NOT_FOUND',
         message: 'Bill not found',
       });
     }
+
+    const { record: bill, source } = found;
 
     // 2. Check bill status
     if (bill.status !== 'UNPAID') {
@@ -127,7 +151,11 @@ export class PaymentService {
     // 6. Only SUCCESS marks bill as PAID
     if (bbpsResponse.status === 'SUCCESS') {
       bill.status = 'PAID';
-      await this.mockBillRepository.save(bill);
+      if (source === 'mock') {
+        await this.mockBillRepository.save(bill);
+      } else {
+        await this.demoRepository.save(bill);
+      }
     }
 
     // 7. Return payment result
@@ -141,8 +169,46 @@ export class PaymentService {
     };
   }
 
-  async payViaBbps(_billPaymentId: string): Promise<void> {
-    // Real BBPS integration will be added later.
-    throw new Error('Not implemented');
+  /**
+   * Re-dispatches a non-final payment (e.g. one left PENDING/TIMEOUT by a prior attempt) to
+   * BBPS and updates its status. Goes through the same `bbpsAdapter` seam `create()` uses
+   * (the DI-injected 'BBPS_ADAPTER' token, currently MockBbpsAdapter) rather than a separate
+   * CbsClient call — there's no real BBPS/CBS base URL configured anywhere in this service
+   * yet (see cbs.client.ts), so routing through a second, equally-unconfigured HTTP client
+   * would not be any more "real" than reusing the adapter this module already standardizes
+   * on; swap MockBbpsAdapter for a real implementation of the same BbpsAdapter interface
+   * once a live BBPS/CBS endpoint exists.
+   */
+  async payViaBbps(billPaymentId: string): Promise<void> {
+    const payment = await this.paymentRepository.findOne({ where: { id: billPaymentId } });
+    if (!payment) {
+      throw new NotFoundException({ code: 'PAYMENT_NOT_FOUND', message: 'Bill payment not found' });
+    }
+
+    if (payment.status === 'SUCCESS') {
+      return;
+    }
+
+    const bbpsResponse = await this.bbpsAdapter.pay({
+      billerCode: payment.billerCode,
+      consumerNumber: payment.consumerNumber,
+      amount: Number(payment.amount),
+    });
+
+    payment.status = bbpsResponse.status;
+    payment.bbpsReferenceId = bbpsResponse.referenceId ?? payment.bbpsReferenceId;
+    await this.paymentRepository.save(payment);
+
+    if (bbpsResponse.status === 'SUCCESS') {
+      const found = await this.findBillingRecord(payment.billerCode, payment.consumerNumber);
+      if (found) {
+        found.record.status = 'PAID';
+        if (found.source === 'mock') {
+          await this.mockBillRepository.save(found.record);
+        } else {
+          await this.demoRepository.save(found.record);
+        }
+      }
+    }
   }
 }

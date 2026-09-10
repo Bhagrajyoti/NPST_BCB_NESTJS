@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'crypto';
 import * as supertest from 'supertest';
 import { KeycloakService } from '../../../src/modules/auth/keycloak/keycloak.service';
+import { LoggingInterceptor } from '../../../src/common/interceptors/logging.interceptor';
+import { ResponseTransformInterceptor } from '../../../src/common/interceptors/response-transform.interceptor';
 import { TestAppModule } from './test-app.module';
 
 export const TEST_SUPERADMIN = {
@@ -65,6 +67,8 @@ export async function createTestApp(
   const app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // Matches main.ts — every success response comes back as { success, data, ... }.
+  app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseTransformInterceptor());
 
   app.use((req: { user?: unknown }, _res: unknown, next: () => void) => {
     req.user = actor;
