@@ -47,6 +47,44 @@ JSON blocks below show `data`.
 
 ## 3. Permissions API
 
+**`POST`** `/permissions/list`
+
+No request body. Returns every `rbac_permission` row, ordered by `module` then `action` — this
+now includes the full **159-permission catalogue** (17 modules: `CUSTOMER`, `ACCOUNTS`,
+`SERVICE_REQUESTS`, `CARDS`, `LOANS`, `DEPOSITS`, `TRANSACTIONS`, `DIGITAL_BANKING`,
+`BENEFICIARIES`, `KYC_COMPLIANCE`, `RULES_LIMITS`, `APPLICATION_MANAGEMENT`, `REPORTS`,
+`USER_MANAGEMENT`, `ROLE_MANAGEMENT`, `AUDIT_SECURITY`), auto-seeded on every boot — see §3.1.
+
+### Success Response
+```json
+[
+  { "id": "c9e13b7a-...", "code": "CUSTOMER_VIEW", "name": "View customer information", "description": null, "module": "CUSTOMER", "action": "VIEW", "isActive": true, "highRisk": false, "createdAt": "...", "updatedAt": "...", "deletedAt": null },
+  { "id": "a1b2c3d4-...", "code": "RULE_ACTIVATE", "name": "Activate rule", "description": null, "module": "RULES_LIMITS", "action": "ACTIVATE", "isActive": true, "highRisk": true, "createdAt": "...", "updatedAt": "...", "deletedAt": null }
+]
+```
+`highRisk: true` (design doc §13) flags permissions like `RULE_ACTIVATE`/`USER_DISABLE`/
+`ROLE_DELETE` that should get a secondary "are you sure?" confirmation in the UI — it isn't an
+extra access restriction, just a display hint.
+
+**Auth:** any authenticated bank-staff account (no `SuperadminGuard` — unlike `create` below,
+listing isn't superadmin-only, since any role-assignment UI needs to read the catalogue).
+
+### 3.1 Permission catalogue seeding
+
+[`permission-catalogue.ts`](src/modules/rbac/data/permission-catalogue.ts) is this service's copy
+of the frontend's local RBAC fallback catalogue (`catalogue.ts`) — kept in lockstep by hand for
+now, so the two never drift while the frontend still uses its own local copy as `rbacSource`.
+[`PermissionCatalogueSeeder`](src/modules/rbac/permission-catalogue.seeder.ts) idempotently
+inserts every code from it into `rbac_permission` on every boot (same pattern as
+`DemoBbpsDataSeeder`/`BankAccountSeeder` — see
+[mock-testing-guide.md](mock-testing-guide.md)), matched on `code`; existing rows (including
+anything created via `POST /permissions/create`) are left untouched. Boot log confirms it:
+```
+[PermissionCatalogueSeeder] rbac_permission catalogue ready (159 defined, 12 inserted this boot)
+```
+Purely local — no Keycloak call, safe to run unconditionally, unlike the role-matrix seeding in
+§4.1 below.
+
 **`POST`** `/permissions/create`
 
 ### Request fields
@@ -57,6 +95,7 @@ JSON blocks below show `data`.
 | description | String | No | |
 | module | String (≤80) | Yes | Grouping label, e.g. `"BILL_PAYMENT"` |
 | action | String (≤80) | Yes | e.g. `"READ"` |
+| highRisk | Boolean | No | Defaults `false` — see §3 |
 
 ### Request
 ```json
@@ -73,6 +112,7 @@ JSON blocks below show `data`.
   "module": "BILL_PAYMENT",
   "action": "READ",
   "isActive": true,
+  "highRisk": false,
   "createdAt": "2026-09-10T00:46:07.090Z",
   "updatedAt": "2026-09-10T00:46:07.090Z"
 }
@@ -176,7 +216,7 @@ current assignment — use `POST /employees/update-role` (§5) for that.
   "dutyType": "CHECKER",
   "isActive": true,
   "permissions": [
-    { "id": "c9e13b7a-082c-4c4b-9917-7007640e6575", "code": "BILL_PAYMENT_VIEW_REAL", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ" }
+    { "id": "c9e13b7a-082c-4c4b-9917-7007640e6575", "code": "BILL_PAYMENT_VIEW_REAL", "name": "View Bill Payments", "module": "BILL_PAYMENT", "action": "READ", "highRisk": false }
   ],
   "delegatedAdminKeycloakUserIds": [],
   "createdAt": "2026-09-10T00:46:16.094Z",
@@ -190,6 +230,33 @@ is inactive.
 **What to use, and where:** `data.permissions` is what a caller checks client-side to decide which
 UI actions to show — this module does not itself enforce permissions on protected actions
 elsewhere; that's each guarded endpoint's own job.
+
+### 4.1 Seeding the default role → permission matrix
+
+[`role-matrix.default.ts`](src/modules/rbac/data/role-matrix.default.ts) mirrors the frontend's
+`role-matrix.default.ts` — the design doc's default permission set for the four system roles
+(`BANK_SUPER_ADMIN` gets the full catalogue; `BANK_ADMIN`/`BANK_MAKER`/`BANK_CHECKER` get the
+documented subsets). Unlike §3.1's permission-catalogue seeder, this is **not** run automatically
+on boot — applying it means calling `POST /roles/map-permissions`-equivalent writes to
+`rbac_role_permission`, and doing that unprompted on every restart would silently clobber any
+customization a `BANK_SUPER_ADMIN` has already made through the real API (the design doc is
+explicit that this matrix is a *starting point*, not enforced logic). It also never touches
+Keycloak — no role gets created there by this script.
+
+Run it explicitly once the four roles exist locally (create each with `POST /roles/create` first,
+using exactly the names `BANK_SUPER_ADMIN`/`BANK_ADMIN`/`BANK_MAKER`/`BANK_CHECKER`):
+```bash
+npm run seed:role-permissions
+```
+For each of the four roles: if no local `rbac_role` row with that exact name exists yet, it's
+skipped with a message telling you to create it first; if found, its `rbac_role_permission`
+mappings are fully replaced with the default matrix (same replace-all semantics as
+`map-permissions`). Safe to re-run any time you want to reset a system role back to the documented
+defaults. Output:
+```
+[SeedRolePermissions] Skipped BANK_SUPER_ADMIN: no local rbac_role row with this name. Create it first via POST /roles/create (name: "BANK_SUPER_ADMIN"), then re-run this script.
+[SeedRolePermissions] BANK_MAKER: applied 86/86 default permissions.
+```
 
 ## 5. Employees API
 

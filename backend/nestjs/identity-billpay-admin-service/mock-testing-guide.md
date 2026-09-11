@@ -249,6 +249,22 @@ exactly (e.g. right card, wrong mobile number — or right mobile number, wrong/
 Try `accountNumber: "20034567890123"` (HDFC) with the ICICI card above to see the `400` case, or
 any valid pair with `debitCardCvv: "000"` to see a wrong-CVV `400`.
 
+### 7.2 Listing every mock customer at once
+
+**`POST`** `/customer/list` — public, **no request body**. Skips the `mobileNumber` lookup
+entirely and just returns every `bank_account` row directly — useful for browsing/seeding checks
+without knowing a mobile number up front.
+
+### Success Response
+```json
+[
+  { "mobileNumber": "9000000001", "accountNumber": "30045678901234", "accountHolderName": "Demo Customer One", "accountType": "SAVINGS", "bankName": "State Bank of India", "branchName": "Connaught Place, New Delhi", "ifscCode": "SBIN0001234", "debitCardNumber": "4012888888881881", "debitCardExpiry": "11/29", "status": "ACTIVE" },
+  { "mobileNumber": "9876543210", "accountNumber": "10023456789012", "accountHolderName": "Ravi Kumar", "accountType": "SAVINGS", "bankName": "ICICI Bank", "branchName": "MG Road, Bengaluru", "ifscCode": "ICIC0001234", "debitCardNumber": "4111111111111111", "debitCardExpiry": "09/28", "status": "ACTIVE" },
+  { "mobileNumber": "9876543210", "accountNumber": "20034567890123", "accountHolderName": "Ravi Kumar", "accountType": "CURRENT", "bankName": "HDFC Bank", "branchName": "Koramangala, Bengaluru", "ifscCode": "HDFC0000123", "debitCardNumber": "5500005555555559", "debitCardExpiry": "03/27", "status": "ACTIVE" }
+]
+```
+Same masking rule as everywhere else: `debitCardCvv` is on the row but never in this response.
+
 To add more mock accounts (e.g. to test a mobile number with 3+ accounts), add rows to
 `DEMO_ROWS` in [bank-account.seeder.ts](src/modules/auth/bank-account/bank-account.seeder.ts) and
 restart — the seeder inserts only rows that don't already exist (matched on
@@ -290,13 +306,16 @@ curl -X POST http://localhost:3000/api/v1/bill-payment/payment/retry \
 | Same route with `mock-superadmin` | passes the guard (reaches handler) | ✅ live |
 | `bill/fetch` → `payment` → `payment/retry` against `demo_bbps_data` | Eventually `SUCCESS`, bill flips to `PAID` | ✅ live, full loop |
 | Full registration saga under mock mode | Real Keycloak user created (mock mode doesn't stub `createUser`) | ✅ live, incl. real login afterwards |
-| `registration/create` with `9876543210` (2 accounts on file) | `registeredAccounts` has 2 entries, masked numbers, no CVV | ✅ live |
+| `registration/create` with `9876543210` (2 accounts on file) | `registeredAccounts` has 2 entries, full (unmasked) numbers, no CVV | ✅ live |
 | `registration/create` with `9000000001` (1 account on file) | `registeredAccounts` has 1 entry | ✅ live |
 | `registration/create` with an unseeded mobile number | `registeredAccounts: []`, still `201` | ✅ live |
 | `registration/create` with an invalid mobile number (e.g. `123`) | `400`, no `panOrCif` field accepted/required anymore | ✅ live |
 | `activate-mobile` with the right mobile + accountNumber + matching card/expiry/CVV | `201`, `success: true`, `"Successfully connected"` | ✅ live |
 | `activate-mobile` with a mobile/accountNumber pair that doesn't exist | `404` | ✅ live |
 | `activate-mobile` with a real accountNumber but someone else's card, or a right card with wrong CVV/expiry | `400` | ✅ live |
+| `POST /customer/list` with no body and no token | `201`, full array of every mock customer/account row, no CVV | ✅ live |
+| `POST /permissions/list` with a valid Bearer token | `201`, array of `rbac_permission` rows | ✅ (e2e test) |
+| `POST /permissions/list` with no token | `401` | ✅ live |
 
 ## 10. Frontend Integration Note
 

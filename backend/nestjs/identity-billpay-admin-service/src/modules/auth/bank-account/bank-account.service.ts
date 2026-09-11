@@ -15,6 +15,10 @@ export interface RegisteredAccountSummary {
   status: string;
 }
 
+export interface CustomerSummary extends RegisteredAccountSummary {
+  mobileNumber: string;
+}
+
 export interface VerifyDebitCardInput {
   mobileNumber: string;
   accountNumber: string;
@@ -43,6 +47,14 @@ export class BankAccountService {
     @InjectRepository(BankAccount)
     private readonly repository: Repository<BankAccount>,
   ) {}
+
+  /** Every mock customer/bank-account record on file — backs the public "list all customers" lookup. */
+  async findAll(): Promise<CustomerSummary[]> {
+    const accounts = await this.repository.find({
+      order: { mobileNumber: 'ASC', createdAt: 'ASC' },
+    });
+    return accounts.map((account) => ({ mobileNumber: account.mobileNumber, ...toSummary(account) }));
+  }
 
   async findByMobileNumber(mobileNumber: string): Promise<RegisteredAccountSummary[]> {
     const accounts = await this.repository.find({

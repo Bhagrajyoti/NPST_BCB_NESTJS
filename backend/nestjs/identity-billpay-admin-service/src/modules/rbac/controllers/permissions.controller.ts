@@ -11,6 +11,13 @@ import { PermissionsService } from '../services/permissions.service';
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
+  @Post('list')
+  @ApiOperation({ summary: 'List all permissions' })
+  @ApiResponse({ status: 201, description: 'List of permissions' })
+  list() {
+    return this.permissionsService.findAll();
+  }
+
   @Post('create')
   @UseGuards(SuperadminGuard)
   @ApiOperation({

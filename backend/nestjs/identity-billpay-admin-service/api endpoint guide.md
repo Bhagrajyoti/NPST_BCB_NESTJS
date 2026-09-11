@@ -171,12 +171,12 @@ create → verify-otp → create-credentials → register-device → complete
 { "id": "86988822-9349-4101-b836-d4e3c0343fca", "mobileNumber": "9876543210", "currentStep": "INIT", "keycloakUserId": null, "deviceProfileId": null, "failureReason": null, "createdAt": "...", "updatedAt": "...", "deletedAt": null, "registeredAccounts": [ { "accountNumber": "10023456789012", "accountHolderName": "Ravi Kumar", "accountType": "SAVINGS", "bankName": "ICICI Bank", "branchName": "MG Road, Bengaluru", "ifscCode": "ICIC0001234", "debitCardNumber": "4111111111111111", "debitCardExpiry": "09/28", "status": "ACTIVE" } ] }
 ```
 **What to use, and where:** `id` → `attemptId` for every call below. `registeredAccounts` is a mock
-CBS lookup keyed by `mobileNumber` (see §9 `bank_account`, and [mock-testing-guide.md §7](mock-testing-guide.md))
-— empty array if the mobile number owns no accounts on file. Account/card numbers are returned in
-full (not masked) here; `accountNumber` is what you send to `/auth/registration/activate-mobile`
-next. `debitCardCvv` is stored on the row but still never returned by any endpoint — the customer
-is expected to already know it from their physical card, which is exactly what
-`activate-mobile` checks.
+CBS lookup keyed by `mobileNumber` (see §10 `bank_account`) — empty array if the mobile number owns
+no accounts on file, and also browsable unfiltered (every mobile number at once) via
+`POST /customer/list` (§5). Account/card numbers are returned in full (not masked) here;
+`accountNumber` is what you send to `/auth/registration/activate-mobile` next. `debitCardCvv` is
+stored on the row but still never returned by any endpoint — the customer is expected to already
+know it from their physical card, which is exactly what `activate-mobile` checks.
 
 **`POST`** `/auth/registration/activate-mobile` — Public.
 
@@ -219,7 +219,7 @@ account exists but the card number/expiry/CVV don't match it.
 ```
 Call this any time — `nextAction` names the exact next endpoint per current `currentStep`.
 
-**`POST`** `/auth/registration/verify-otp` — Public. (Get `challengeId`/`otp` from `POST /auth/otp/create`, §5, first.)
+**`POST`** `/auth/registration/verify-otp` — Public. (Get `challengeId`/`otp` from `POST /auth/otp/create`, §6, first.)
 
 ### Request fields
 | Field | Type | Required | Description |
@@ -283,7 +283,25 @@ Attempt row with `currentStep: "DEVICE_REGISTERED"`. **Errors:** `400` — attem
 **`POST`** `/auth/registration/list` / **`get`** / **`delete`** — Bearer (admin review). `get`/`delete`
 take `{ "id": "<attemptId>" }`; `delete` soft-deletes (`{ id, deleted: true }`).
 
-## 5. OTP API
+## 5. Customers API
+
+**`POST`** `/customer/list` — Public, **no request body**.
+
+Returns every mock customer/bank-account record on file directly — same rows and shape as
+`registeredAccounts` in §4 above (§10 `bank_account`), just not filtered to one mobile number.
+No auth, no filters, no pagination: call it and get everything back.
+
+### Success Response
+```json
+[
+  { "mobileNumber": "9876543210", "accountNumber": "10023456789012", "accountHolderName": "Ravi Kumar", "accountType": "SAVINGS", "bankName": "ICICI Bank", "branchName": "MG Road, Bengaluru", "ifscCode": "ICIC0001234", "debitCardNumber": "4111111111111111", "debitCardExpiry": "09/28", "status": "ACTIVE" },
+  { "mobileNumber": "9876543210", "accountNumber": "20034567890123", "accountHolderName": "Ravi Kumar", "accountType": "CURRENT", "bankName": "HDFC Bank", "branchName": "Koramangala, Bengaluru", "ifscCode": "HDFC0000123", "debitCardNumber": "5500005555555559", "debitCardExpiry": "03/27", "status": "ACTIVE" }
+]
+```
+`debitCardCvv` is stored on the row but never returned here either — same rule as §4's
+`registeredAccounts` (see [mock-testing-guide.md §7](mock-testing-guide.md)).
+
+## 6. OTP API
 
 **`POST`** `/auth/otp/create` — Public.
 
@@ -326,7 +344,7 @@ returns `404`/`400`.
 **`POST`** `/auth/otp/list` / **`get`** / **`delete`** — Bearer (admin/support). Same
 `{ id }` → row/array/`{ id, deleted: true }` pattern.
 
-## 6. Credential API (Customer MPIN)
+## 7. Credential API (Customer MPIN)
 
 All routes require Bearer. `create`/`get`/`verify`/`delete` also run an ownership check: if the
 body's `userId` differs from the caller's own token `sub`, the caller must hold
@@ -366,7 +384,7 @@ MPIN row only; does not touch the Keycloak password).
 **`POST`** `/auth/credential/list` — Bearer, admin/support — array of all customers' MPIN metadata
 (no secrets returned).
 
-## 7. Device API
+## 8. Device API
 
 All routes require Bearer.
 
@@ -387,7 +405,7 @@ New devices always start `trusted: false`.
 
 **`POST`** `/auth/device/list` / **`get`** / **`delete`** — same `{ id }` pattern as other modules.
 
-## 8. Corporate Hierarchy API
+## 9. Corporate Hierarchy API
 
 All routes require Bearer. Links a corporate customer's Keycloak user to a maker/checker role for
 a specific CIF.
@@ -410,7 +428,7 @@ reserved for future use — no endpoint currently sets it.
 
 **`POST`** `/auth/corporate-hierarchy/list` / **`get`** / **`delete`** — same `{ id }` pattern.
 
-## 9. Database Tables
+## 10. Database Tables
 
 **`registration_attempt`**
 | Field | Type | Description |
@@ -478,7 +496,7 @@ reserved for future use — no endpoint currently sets it.
 | approval_limit | DECIMAL(18,2), nullable | Reserved, unused |
 | created_at / updated_at / deleted_at | TIMESTAMP | |
 
-## 10. Registration Saga Flow
+## 11. Registration Saga Flow
 
 ```
 POST /auth/registration/create           (INIT)
@@ -500,7 +518,7 @@ POST /auth/registration/complete          (COMPLETED)
 POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from create-credentials)
 ```
 
-## 11. Validation & Error Handling
+## 12. Validation & Error Handling
 
 | Code / status | Where | Meaning |
 |---|---|---|
@@ -511,7 +529,7 @@ POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from
 | `404` | `otp/*`, `registration/*`, `device/*`, `corporate-hierarchy/*` gets | unknown `id`/`challengeId` |
 | `400` | `registration/verify-otp\|create-credentials\|register-device\|complete` | wrong OTP, or attempt not at the required step |
 
-## 12. Testing Scenarios
+## 13. Testing Scenarios
 
 | Scenario | Expected Result | Verified |
 |---|---|---|
@@ -529,8 +547,9 @@ POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from
 | OTP: wrong code repeated past `OTP_MAX_ATTEMPTS` | `403`, locked for `OTP_LOCK_MINUTES` | ✅ (unit test) |
 | OTP: expired challenge | `400` even with the correct code | ✅ (unit test) |
 | Customer passes another customer's `userId` to `credential/get` | `403` (unless caller is `BANK_ADMIN`/`BANK_SUPER_ADMIN`) | ✅ (unit test) |
+| `POST /customer/list` with no body, no token | `201`, full array of mock customer/account rows, no `debitCardCvv` field anywhere in it | ✅ (e2e test) |
 
-## 13. Frontend Integration Note
+## 14. Frontend Integration Note
 
 Persist `attemptId` client-side through the whole registration saga; on app relaunch, call
 `POST /auth/registration/resume` with it before assuming onboarding needs to restart from scratch.

@@ -144,6 +144,7 @@ export class RolesService {
         name: m.permission.name,
         module: m.permission.module,
         action: m.permission.action,
+        highRisk: m.permission.highRisk,
       })),
       delegatedAdminKeycloakUserIds: delegations.map((d) => d.delegateKeycloakUserId),
       createdAt: role.createdAt,

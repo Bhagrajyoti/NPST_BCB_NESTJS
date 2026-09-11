@@ -108,6 +108,17 @@ describe('All API endpoints (e2e)', () => {
     });
   });
 
+  describe('Customers', () => {
+    it('POST /api/v1/customer/list — public, no body, returns mock customer data directly', async () => {
+      const res = await publicRequest(app).post('/api/v1/customer/list').expect(201);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThan(0);
+      expect(res.body.data[0].mobileNumber).toBeDefined();
+      expect(res.body.data[0].accountNumber).toBeDefined();
+      expect(res.body.data[0].debitCardCvv).toBeUndefined();
+    });
+  });
+
   describe('Auth — Credential', () => {
     const keycloakUserId = '334b032c-7468-47fa-82a3-8204b80913a2';
 
@@ -273,6 +284,11 @@ describe('All API endpoints (e2e)', () => {
   });
 
   describe('RBAC — Permissions', () => {
+    it('POST /api/v1/permissions/list', async () => {
+      const res = await authedRequest(app).post('/api/v1/permissions/list').expect(201);
+      expect(Array.isArray(res.body.data)).toBe(true);
+    });
+
     it('POST /api/v1/permissions/create', async () => {
       const code = `PERM_${Date.now()}`;
       const res = await authedRequest(app)

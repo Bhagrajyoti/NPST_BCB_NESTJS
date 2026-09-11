@@ -20,6 +20,7 @@ import { OtpController } from './otp/otp.controller';
 import { OtpService } from './otp/otp.service';
 import { OtpChallenge } from './otp/entities/otp-challenge.entity';
 import { KeycloakService } from './keycloak/keycloak.service';
+import { BankAccountController } from './bank-account/bank-account.controller';
 import { BankAccountService } from './bank-account/bank-account.service';
 import { BankAccountSeeder } from './bank-account/bank-account.seeder';
 import { BankAccount } from './bank-account/entities/bank-account.entity';
@@ -43,6 +44,7 @@ import { BankAccount } from './bank-account/entities/bank-account.entity';
     CorporateHierarchyController,
     OtpController,
     AuthController,
+    BankAccountController,
   ],
   providers: [
     RegistrationService,
