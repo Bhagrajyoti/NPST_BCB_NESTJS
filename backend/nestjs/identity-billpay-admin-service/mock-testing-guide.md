@@ -57,7 +57,7 @@ accepts hardcoded passwords for anyone.
 `KeycloakService.createUser`/`assignRealmRoleToUser`/`disableUser`/`signup`/etc. are **not**
 mocked — they always hit the real Keycloak Admin API, even with `AUTH_MOCK_MODE=true` (this is
 what lets the registration saga, `/employees/create`, and `POST /auth/signup` provision real,
-loggable-in accounts during mock-mode testing — see §7). Only the `login`/`logout` grant flow is
+loggable-in accounts during mock-mode testing — see §9). Only the `login`/`logout` grant flow is
 stubbed — so an account created via `POST /auth/signup` while mock mode is on is a **real**
 Keycloak account, but you can't actually log into it with `POST /auth/login` until you turn mock
 mode back off (mock `login` only recognizes the fixed usernames in §5).
@@ -126,7 +126,136 @@ To reset: `UPDATE demo_bbps_data SET status='UNPAID' WHERE biller_code='...'` in
 
 Full API details for these fields: [billpaymentservice.md](billpaymentservice.md).
 
-## 7. Worked Example — Full Flow
+## 7. Mock Bank Account Data
+
+`POST /auth/registration/create` now takes **only `mobileNumber`** — it no longer asks for a
+PAN/CIF. Instead, it looks up every bank account on file for that mobile number and returns them
+as `registeredAccounts` alongside the new registration attempt, standing in for a real CBS "list
+accounts by mobile number" call. Backed by
+[`bank_account`](src/modules/auth/bank-account/entities/bank-account.entity.ts), a small fixed set
+of rows re-seeded idempotently on every boot by
+[`BankAccountSeeder`](src/modules/auth/bank-account/bank-account.seeder.ts) — same pattern as
+`DemoBbpsDataSeeder` (§6), no manual step needed. Boot log confirms it:
+```
+[BankAccountSeeder] bank_account ready (3 fixed rows)
+```
+
+| mobileNumber | bankName | accountType | accountNumber | ifscCode | debitCardNumber | expiry | cvv |
+|---|---|---|---|---|---|---|---|
+| `9876543210` | ICICI Bank | SAVINGS | `10023456789012` | `ICIC0001234` | `4111111111111111` | `09/28` | `123` |
+| `9876543210` | HDFC Bank | CURRENT | `20034567890123` | `HDFC0000123` | `5500005555555559` | `03/27` | `456` |
+| `9000000001` | State Bank of India | SAVINGS | `30045678901234` | `SBIN0001234` | `4012888888881881` | `11/29` | `789` |
+
+(`cvv` above is only ever an *input* you send to `activate-mobile`, §7.2 below — no endpoint ever
+returns it.)
+
+Any other mobile number returns `registeredAccounts: []` — that's a normal response (a brand-new
+customer with no accounts yet), not an error.
+
+**`POST`** `/auth/registration/create`
+
+### Request
+```json
+{ "mobileNumber": "9876543210" }
+```
+
+### Success Response
+```json
+{
+  "id": "c7cd9d8b-168f-4f4a-917c-7a982389fba0",
+  "mobileNumber": "9876543210",
+  "currentStep": "INIT",
+  "failureReason": null,
+  "keycloakUserId": null,
+  "deviceProfileId": null,
+  "createdAt": "...",
+  "updatedAt": "...",
+  "deletedAt": null,
+  "registeredAccounts": [
+    {
+      "accountNumber": "10023456789012",
+      "accountHolderName": "Ravi Kumar",
+      "accountType": "SAVINGS",
+      "bankName": "ICICI Bank",
+      "branchName": "MG Road, Bengaluru",
+      "ifscCode": "ICIC0001234",
+      "debitCardNumber": "4111111111111111",
+      "debitCardExpiry": "09/28",
+      "status": "ACTIVE"
+    },
+    {
+      "accountNumber": "20034567890123",
+      "accountHolderName": "Ravi Kumar",
+      "accountType": "CURRENT",
+      "bankName": "HDFC Bank",
+      "branchName": "Koramangala, Bengaluru",
+      "ifscCode": "HDFC0000123",
+      "debitCardNumber": "5500005555555559",
+      "debitCardExpiry": "03/27",
+      "status": "ACTIVE"
+    }
+  ]
+}
+```
+
+`accountNumber`/`debitCardNumber` are returned in full (not masked) — `BankAccountService`
+doesn't mask anything it returns. `debitCardCvv` is stored on the row but **never** returned by
+any endpoint; there's no code path that serializes it into a response. That's deliberate: it's
+what `activate-mobile` below checks the caller actually knows, so returning it here would make
+that check pointless.
+
+### 7.1 Activating a mobile number against an account
+
+**`POST`** `/auth/registration/activate-mobile` — same controller/route group as `create` above.
+Send the `mobileNumber` back with one `accountNumber` from `registeredAccounts` plus the debit
+card details for that account (number, expiry, CVV — CVV is never given to you by any endpoint,
+you're expected to already know it, same as with a real card). If everything matches the row in
+`bank_account`, and that row actually belongs to `mobileNumber`, you get back a success message —
+this is the mock equivalent of "verify you hold the card before linking the account."
+
+### Request
+```json
+{
+  "mobileNumber": "9876543210",
+  "accountNumber": "10023456789012",
+  "debitCardNumber": "4111111111111111",
+  "debitCardExpiry": "09/28",
+  "debitCardCvv": "123"
+}
+```
+
+### Success Response
+```json
+{
+  "success": true,
+  "message": "Successfully connected",
+  "account": {
+    "accountNumber": "10023456789012",
+    "accountHolderName": "Ravi Kumar",
+    "accountType": "SAVINGS",
+    "bankName": "ICICI Bank",
+    "branchName": "MG Road, Bengaluru",
+    "ifscCode": "ICIC0001234",
+    "debitCardNumber": "4111111111111111",
+    "debitCardExpiry": "09/28",
+    "status": "ACTIVE"
+  }
+}
+```
+
+**Errors:** `404` — no `bank_account` row for that `mobileNumber` + `accountNumber` pair ·
+`400` — the row exists but `debitCardNumber`/`debitCardExpiry`/`debitCardCvv` don't all match it
+exactly (e.g. right card, wrong mobile number — or right mobile number, wrong/mistyped card).
+Try `accountNumber: "20034567890123"` (HDFC) with the ICICI card above to see the `400` case, or
+any valid pair with `debitCardCvv: "000"` to see a wrong-CVV `400`.
+
+To add more mock accounts (e.g. to test a mobile number with 3+ accounts), add rows to
+`DEMO_ROWS` in [bank-account.seeder.ts](src/modules/auth/bank-account/bank-account.seeder.ts) and
+restart — the seeder inserts only rows that don't already exist (matched on
+`mobileNumber` + `accountNumber`), so it's safe to add to the list without duplicating existing
+rows.
+
+## 8. Worked Example — Full Flow
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:3000/api/v1/auth/login \
@@ -149,7 +278,7 @@ curl -X POST http://localhost:3000/api/v1/bill-payment/payment/retry \
   -d '{"id":"<paymentId from above>"}'
 ```
 
-## 8. Testing Scenarios
+## 9. Testing Scenarios
 
 | Scenario | Expected Result | Verified |
 |---|---|---|
@@ -161,8 +290,15 @@ curl -X POST http://localhost:3000/api/v1/bill-payment/payment/retry \
 | Same route with `mock-superadmin` | passes the guard (reaches handler) | ✅ live |
 | `bill/fetch` → `payment` → `payment/retry` against `demo_bbps_data` | Eventually `SUCCESS`, bill flips to `PAID` | ✅ live, full loop |
 | Full registration saga under mock mode | Real Keycloak user created (mock mode doesn't stub `createUser`) | ✅ live, incl. real login afterwards |
+| `registration/create` with `9876543210` (2 accounts on file) | `registeredAccounts` has 2 entries, masked numbers, no CVV | ✅ live |
+| `registration/create` with `9000000001` (1 account on file) | `registeredAccounts` has 1 entry | ✅ live |
+| `registration/create` with an unseeded mobile number | `registeredAccounts: []`, still `201` | ✅ live |
+| `registration/create` with an invalid mobile number (e.g. `123`) | `400`, no `panOrCif` field accepted/required anymore | ✅ live |
+| `activate-mobile` with the right mobile + accountNumber + matching card/expiry/CVV | `201`, `success: true`, `"Successfully connected"` | ✅ live |
+| `activate-mobile` with a mobile/accountNumber pair that doesn't exist | `404` | ✅ live |
+| `activate-mobile` with a real accountNumber but someone else's card, or a right card with wrong CVV/expiry | `400` | ✅ live |
 
-## 9. Frontend Integration Note
+## 10. Frontend Integration Note
 
 Mock mode is a **local/CI-only** switch — never point a real mobile app or admin portal build at
 a service with `AUTH_MOCK_MODE=true`. When writing integration code against this API, always test

@@ -10,6 +10,7 @@ import { InitRegistrationDto } from './dto/init-registration.dto';
 import { VerifyRegistrationOtpDto } from './dto/verify-registration-otp.dto';
 import { CreateCredentialsDto } from './dto/create-credentials.dto';
 import { RegisterAttemptDeviceDto } from './dto/register-attempt-device.dto';
+import { ActivateMobileDto } from './dto/activate-mobile.dto';
 
 @ApiTags('Mobile — Registration (Customer onboarding)', 'Auth — Registration')
 @Controller('auth/registration')
@@ -65,13 +66,33 @@ export class RegistrationController {
   @ApiOperation(
     mobileCustomerOp(
       'Start customer registration',
-      'Step 1 of 5. Creates a registration attempt with step INIT using the customer’s ' +
-        'mobile number and PAN/CIF. Public — no Bearer token required.',
+      'Step 1 of 5. Creates a registration attempt with step INIT using only the customer’s ' +
+        'mobile number, and returns every bank account already on file for that number ' +
+        '(registeredAccounts — masked account/card numbers, no CVV). Public — no Bearer token ' +
+        'required.',
     ),
   )
-  @ApiResponse({ status: 201, description: 'Registration started' })
+  @ApiResponse({ status: 201, description: 'Registration started, with registeredAccounts for this mobile number' })
   create(@Body() dto: InitRegistrationDto) {
     return this.service.create(dto);
+  }
+
+  @Public()
+  @Post('activate-mobile')
+  @ApiOperation(
+    mobileCustomerOp(
+      'Activate mobile number against an account',
+      'Proves the caller holds the physical debit card for one of the accounts returned by ' +
+        '/auth/registration/create (mobileNumber + accountNumber + debit card number/expiry/CVV ' +
+        'must all match bank_account exactly). Returns success only if the card genuinely belongs ' +
+        'to that mobile number\'s account. Public — no Bearer token required.',
+    ),
+  )
+  @ApiResponse({ status: 201, description: '{ success: true, message: "Successfully connected", account }' })
+  @ApiResponse({ status: 400, description: 'Debit card details do not match this account' })
+  @ApiResponse({ status: 404, description: 'No account found for this mobile number and account number' })
+  activateMobile(@Body() dto: ActivateMobileDto) {
+    return this.service.activateMobile(dto);
   }
 
   @Public()

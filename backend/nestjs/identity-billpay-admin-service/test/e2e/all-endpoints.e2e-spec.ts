@@ -78,15 +78,16 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/registration/create', async () => {
       const res = await publicRequest(app)
         .post('/api/v1/auth/registration/create')
-        .send({ mobileNumber: '9876543210', panOrCif: 'CIF12345' })
+        .send({ mobileNumber: '9876543210' })
         .expect(201);
       expect(res.body.data.id).toBeDefined();
+      expect(res.body.data.registeredAccounts).toBeDefined();
     });
 
     it('POST /api/v1/auth/registration/get', async () => {
       const created = await publicRequest(app)
         .post('/api/v1/auth/registration/create')
-        .send({ mobileNumber: '9876543211', panOrCif: 'CIF12346' });
+        .send({ mobileNumber: '9876543211' });
 
       await authedRequest(app)
         .post('/api/v1/auth/registration/get')
@@ -97,7 +98,7 @@ describe('All API endpoints (e2e)', () => {
     it('POST /api/v1/auth/registration/delete', async () => {
       const created = await publicRequest(app)
         .post('/api/v1/auth/registration/create')
-        .send({ mobileNumber: '9876543212', panOrCif: 'CIF12347' });
+        .send({ mobileNumber: '9876543212' });
 
       const res = await authedRequest(app)
         .post('/api/v1/auth/registration/delete')

@@ -165,13 +165,46 @@ create → verify-otp → create-credentials → register-device → complete
 | Field | Type | Required | Description |
 |---|---|---|---|
 | mobileNumber | String | Yes | 10-digit Indian mobile number |
-| panOrCif | String | Yes | PAN or CIF (not format-validated — both are legal) |
 
 ### Success Response
 ```json
-{ "id": "86988822-9349-4101-b836-d4e3c0343fca", "mobileNumber": "9876543210", "panOrCif": "CIF99999", "currentStep": "INIT", "keycloakUserId": null, "deviceProfileId": null, "failureReason": null, "createdAt": "...", "updatedAt": "...", "deletedAt": null }
+{ "id": "86988822-9349-4101-b836-d4e3c0343fca", "mobileNumber": "9876543210", "currentStep": "INIT", "keycloakUserId": null, "deviceProfileId": null, "failureReason": null, "createdAt": "...", "updatedAt": "...", "deletedAt": null, "registeredAccounts": [ { "accountNumber": "10023456789012", "accountHolderName": "Ravi Kumar", "accountType": "SAVINGS", "bankName": "ICICI Bank", "branchName": "MG Road, Bengaluru", "ifscCode": "ICIC0001234", "debitCardNumber": "4111111111111111", "debitCardExpiry": "09/28", "status": "ACTIVE" } ] }
 ```
-**What to use, and where:** `id` → `attemptId` for every call below.
+**What to use, and where:** `id` → `attemptId` for every call below. `registeredAccounts` is a mock
+CBS lookup keyed by `mobileNumber` (see §9 `bank_account`, and [mock-testing-guide.md §7](mock-testing-guide.md))
+— empty array if the mobile number owns no accounts on file. Account/card numbers are returned in
+full (not masked) here; `accountNumber` is what you send to `/auth/registration/activate-mobile`
+next. `debitCardCvv` is stored on the row but still never returned by any endpoint — the customer
+is expected to already know it from their physical card, which is exactly what
+`activate-mobile` checks.
+
+**`POST`** `/auth/registration/activate-mobile` — Public.
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| mobileNumber | String | Yes | 10-digit Indian mobile number |
+| accountNumber | String | Yes | From `registeredAccounts` above |
+| debitCardNumber | String | Yes | 12-19 digits |
+| debitCardExpiry | String | Yes | `MM/YY` |
+| debitCardCvv | String | Yes | 3-4 digits |
+
+### Request
+```json
+{ "mobileNumber": "9876543210", "accountNumber": "10023456789012", "debitCardNumber": "4111111111111111", "debitCardExpiry": "09/28", "debitCardCvv": "123" }
+```
+
+### Success Response
+```json
+{ "success": true, "message": "Successfully connected", "account": { "accountNumber": "10023456789012", "accountHolderName": "Ravi Kumar", "accountType": "SAVINGS", "bankName": "ICICI Bank", "branchName": "MG Road, Bengaluru", "ifscCode": "ICIC0001234", "debitCardNumber": "4111111111111111", "debitCardExpiry": "09/28", "status": "ACTIVE" } }
+```
+Verifies the card number/expiry/CVV sent in match the card on file for `accountNumber` **and**
+that `accountNumber` actually belongs to `mobileNumber` — i.e. that the caller both owns the
+mobile number and physically holds the card for the account they're claiming. Not a saga step
+(no `attemptId` involved); can be called any time.
+
+**Errors:** `404` — no account exists for that `mobileNumber` + `accountNumber` pair · `400` —
+account exists but the card number/expiry/CVV don't match it.
 
 **`POST`** `/auth/registration/resume` — Public.
 
@@ -384,12 +417,26 @@ reserved for future use — no endpoint currently sets it.
 |---|---|---|
 | id | UUID | Primary key |
 | mobile_number | VARCHAR | |
-| pan_or_cif | VARCHAR | |
 | current_step | VARCHAR, default `INIT` | Saga state machine position |
 | failure_reason | VARCHAR(500), nullable | Set by `RegistrationOrchestratorService.fail()` |
 | keycloak_user_id | VARCHAR(36), nullable | Set once `create-credentials` succeeds |
 | device_profile_id | VARCHAR(36), nullable | Set once `register-device` succeeds |
 | created_at / updated_at / deleted_at | TIMESTAMP | |
+
+**`bank_account`** — mock CBS data, see [mock-testing-guide.md §7](mock-testing-guide.md)
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| mobile_number | VARCHAR, indexed | Looked up by `POST /auth/registration/create` |
+| account_number | VARCHAR | Returned in full by `registration/create` |
+| account_holder_name | VARCHAR | |
+| account_type | VARCHAR, default `SAVINGS` | `SAVINGS` \| `CURRENT` |
+| bank_name / branch_name / ifsc_code | VARCHAR | |
+| debit_card_number | VARCHAR | Returned in full by `registration/create`; also the input `activate-mobile` verifies |
+| debit_card_cvv | VARCHAR | Stored only — **never** returned by any endpoint; `activate-mobile` verifies it as input instead |
+| debit_card_expiry | VARCHAR | `MM/YY` |
+| status | VARCHAR, default `ACTIVE` | |
+| created_at / updated_at | TIMESTAMP | |
 
 **`otp_challenge`**
 | Field | Type | Description |

@@ -27,7 +27,7 @@ describe('Registration saga resumption (e2e)', () => {
   async function createAttempt(mobileNumber: string) {
     const res = await publicRequest(app)
       .post('/api/v1/auth/registration/create')
-      .send({ mobileNumber, panOrCif: 'CIF-SAGA-TEST' })
+      .send({ mobileNumber })
       .expect(201);
     return res.body.data.id as string;
   }

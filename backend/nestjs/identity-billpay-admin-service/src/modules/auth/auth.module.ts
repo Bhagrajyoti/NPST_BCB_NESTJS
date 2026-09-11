@@ -20,6 +20,9 @@ import { OtpController } from './otp/otp.controller';
 import { OtpService } from './otp/otp.service';
 import { OtpChallenge } from './otp/entities/otp-challenge.entity';
 import { KeycloakService } from './keycloak/keycloak.service';
+import { BankAccountService } from './bank-account/bank-account.service';
+import { BankAccountSeeder } from './bank-account/bank-account.seeder';
+import { BankAccount } from './bank-account/entities/bank-account.entity';
 
 @Module({
   imports: [
@@ -30,6 +33,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
       DeviceProfile,
       CorporateHierarchy,
       OtpChallenge,
+      BankAccount,
     ]),
   ],
   controllers: [
@@ -49,6 +53,8 @@ import { KeycloakService } from './keycloak/keycloak.service';
     CorporateHierarchyService,
     OtpService,
     KeycloakService,
+    BankAccountService,
+    BankAccountSeeder,
   ],
   exports: [KeycloakService],
 })

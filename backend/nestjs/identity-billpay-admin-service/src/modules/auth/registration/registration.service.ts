@@ -6,10 +6,12 @@ import { InitRegistrationDto } from './dto/init-registration.dto';
 import { VerifyRegistrationOtpDto } from './dto/verify-registration-otp.dto';
 import { CreateCredentialsDto } from './dto/create-credentials.dto';
 import { RegisterAttemptDeviceDto } from './dto/register-attempt-device.dto';
+import { ActivateMobileDto } from './dto/activate-mobile.dto';
 import { RegistrationOrchestratorService, RegistrationStep } from './registration-orchestrator.service';
 import { OtpService } from '../otp/otp.service';
 import { KeycloakService } from '../keycloak/keycloak.service';
 import { DeviceService } from '../device/device.service';
+import { BankAccountService } from '../bank-account/bank-account.service';
 
 @Injectable()
 export class RegistrationService {
@@ -20,6 +22,7 @@ export class RegistrationService {
     private readonly otpService: OtpService,
     private readonly keycloakService: KeycloakService,
     private readonly deviceService: DeviceService,
+    private readonly bankAccountService: BankAccountService,
   ) {}
 
   findAll() {
@@ -34,13 +37,36 @@ export class RegistrationService {
     return record;
   }
 
-  create(dto: InitRegistrationDto) {
+  /**
+   * Step 1: create the attempt and, alongside it, resolve every bank account already on file
+   * for this mobile number (mock CBS lookup — see BankAccountService) so the app can show the
+   * customer which accounts it found before they continue the saga.
+   */
+  async create(dto: InitRegistrationDto) {
     const entity = this.repository.create({
       mobileNumber: dto.mobileNumber,
-      panOrCif: dto.panOrCif,
       currentStep: RegistrationStep.INIT,
     });
-    return this.repository.save(entity);
+    const attempt = await this.repository.save(entity);
+    const registeredAccounts = await this.bankAccountService.findByMobileNumber(dto.mobileNumber);
+
+    return { ...attempt, registeredAccounts };
+  }
+
+  /**
+   * Activates a mobile number against one of its registered accounts by proving the caller
+   * holds the physical debit card for it (number + expiry + CVV must match bank_account
+   * exactly, and that account must actually belong to this mobile number) — see
+   * BankAccountService.verifyDebitCard. Not a saga step (no RegistrationAttempt involved);
+   * can be called any time a mobile number's registeredAccounts are known.
+   */
+  async activateMobile(dto: ActivateMobileDto) {
+    const account = await this.bankAccountService.verifyDebitCard(dto);
+    return {
+      success: true,
+      message: 'Successfully connected',
+      account,
+    };
   }
 
   private requireStep(attempt: RegistrationAttempt, expected: RegistrationStep): void {
