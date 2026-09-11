@@ -12,6 +12,12 @@ import { MockBill } from '../bill/entities/mock-bill.entity';
 import { DemoBbpsData } from '../demo/entities/demo-bbps-data.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BbpsAdapter } from './adapter/bbps.adapter';
+import { InternalEventBusService } from '../../../internal-events/internal-event-bus.service';
+import {
+  BILL_PAYMENT_COMPLETED_EVENT,
+  BillPaymentCompletedEvent,
+} from '../events/bill-payment-completed.event';
+
 
 type BillingRecord =
   | { source: 'mock'; record: MockBill }
@@ -31,6 +37,7 @@ export class PaymentService {
 
     @Inject('BBPS_ADAPTER')
     private readonly bbpsAdapter: BbpsAdapter,
+    private readonly eventBus: InternalEventBusService,
   ) {}
 
   // demo_bbps_data is a fallback, checked only when billerCode+consumerNumber aren't in
@@ -147,6 +154,8 @@ export class PaymentService {
     });
 
     const savedPayment = await this.paymentRepository.save(payment);
+    this.announceIfFinal(savedPayment.id, savedPayment.status);
+
 
     // 6. Only SUCCESS marks bill as PAID
     if (bbpsResponse.status === 'SUCCESS') {
@@ -198,6 +207,8 @@ export class PaymentService {
     payment.status = bbpsResponse.status;
     payment.bbpsReferenceId = bbpsResponse.referenceId ?? payment.bbpsReferenceId;
     await this.paymentRepository.save(payment);
+    this.announceIfFinal(payment.id, payment.status);
+
 
     if (bbpsResponse.status === 'SUCCESS') {
       const found = await this.findBillingRecord(payment.billerCode, payment.consumerNumber);
@@ -211,4 +222,16 @@ export class PaymentService {
       }
     }
   }
+
+  // Tells the rest of the app a payment reached a final result. PENDING and
+  // TIMEOUT are not final (the payment may still be retried), so they are skipped.
+  private announceIfFinal(billPaymentId: string, status: string): void {
+    if (status === 'SUCCESS' || status === 'FAILED') {
+      this.eventBus.publish(
+        BILL_PAYMENT_COMPLETED_EVENT,
+        new BillPaymentCompletedEvent(billPaymentId, status),
+      );
+    }
+  }
+
 }

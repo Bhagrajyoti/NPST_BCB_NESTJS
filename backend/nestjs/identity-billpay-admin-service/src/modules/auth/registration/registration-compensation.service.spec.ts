@@ -24,6 +24,7 @@ describe('RegistrationCompensationService', () => {
       keycloakService as any,
       deviceService as any,
       credentialService as any,
+      { publish: jest.fn() } as any,
     );
   });
 

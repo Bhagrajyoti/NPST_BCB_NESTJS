@@ -6,6 +6,9 @@ import { RegistrationAttempt } from './entities/registration-attempt.entity';
 import { KeycloakService } from '../keycloak/keycloak.service';
 import { DeviceService } from '../device/device.service';
 import { CredentialService } from '../credential/credential.service';
+import { InternalEventBusService } from '../../../internal-events/internal-event-bus.service';
+import { USER_DEACTIVATED_EVENT, UserDeactivatedEvent } from '../events/user-deactivated.event';
+
 
 // Rolls back whatever the orchestrator committed for a given step when a
 // later step fails hard (non-retryable).
@@ -19,6 +22,8 @@ export class RegistrationCompensationService {
     private readonly keycloakService: KeycloakService,
     private readonly deviceService: DeviceService,
     private readonly credentialService: CredentialService,
+    private readonly eventBus: InternalEventBusService,
+
   ) {}
 
   async rollback(attemptId: string, atStep: RegistrationStep): Promise<void> {
@@ -44,10 +49,14 @@ export class RegistrationCompensationService {
         if (attempt.keycloakUserId) {
           // Disable rather than delete: keeps the Keycloak side reversible/auditable
           // instead of destroying identity data an operator might need to inspect.
-          await this.safely(
-            () => this.keycloakService.disableUser(attempt.keycloakUserId as string),
-            `disable Keycloak user ${attempt.keycloakUserId}`,
-          );
+            await this.safely(async () => {
+              await this.keycloakService.disableUser(attempt.keycloakUserId as string);
+              this.eventBus.publish(
+                USER_DEACTIVATED_EVENT,
+                new UserDeactivatedEvent(attempt.keycloakUserId as string, 'REGISTRATION_ROLLED_BACK'),
+              );
+            }, `disable Keycloak user ${attempt.keycloakUserId}`);
+
         }
         break;
 

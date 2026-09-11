@@ -43,7 +43,12 @@ describe('AuthorizationRulesService', () => {
       create: jest.fn((data) => data),
       save: jest.fn((data) => Promise.resolve(data)),
     };
-    service = new AuthorizationRulesService(rules as any, history as any);
+      service = new AuthorizationRulesService(
+      rules as any,
+      history as any,
+      { publish: jest.fn() } as any,
+    );
+
   });
 
   describe('findAll', () => {

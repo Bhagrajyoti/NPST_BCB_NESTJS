@@ -564,9 +564,22 @@ describe('All API endpoints (e2e)', () => {
         .expect(404);
     });
 
-    it('rejects a caller with no admin-portal role', async () => {
+    it('list is public — a caller with no admin-portal role still gets the list', async () => {
       const noRoleApp = await createTestApp(TEST_NO_ROLE);
-      await authedRequest(noRoleApp).post('/api/v1/admin/admin-user/list').send({}).expect(403);
+      const res = await publicRequest(noRoleApp)
+        .post('/api/v1/admin/admin-user/list')
+        .send({})
+        .expect(201);
+      expect(res.body.data.some((u: { id: string }) => u.id === seededId)).toBe(true);
+      await noRoleApp.close();
+    });
+
+    it('get still rejects a caller with no admin-portal role', async () => {
+      const noRoleApp = await createTestApp(TEST_NO_ROLE);
+      await authedRequest(noRoleApp)
+        .post('/api/v1/admin/admin-user/get')
+        .send({ id: seededId })
+        .expect(403);
       await noRoleApp.close();
     });
   });

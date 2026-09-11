@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { InternalEventBusModule } from '../../internal-events/internal-event-bus.module';
+import { AuditOutboxModule } from '../../clients/audit-outbox/audit-outbox.module';
+import { AuthEventsAuditListener } from './auth-events-audit.listener';
 import { RegistrationController } from './registration/registration.controller';
 import { RegistrationService } from './registration/registration.service';
 import { RegistrationOrchestratorService } from './registration/registration-orchestrator.service';
@@ -24,6 +27,8 @@ import { KeycloakService } from './keycloak/keycloak.service';
 @Module({
   imports: [
     HttpModule,
+    InternalEventBusModule,
+    AuditOutboxModule,
     TypeOrmModule.forFeature([
       RegistrationAttempt,
       Credential,
@@ -49,6 +54,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
     CorporateHierarchyService,
     OtpService,
     KeycloakService,
+    AuthEventsAuditListener,
   ],
   exports: [KeycloakService],
 })

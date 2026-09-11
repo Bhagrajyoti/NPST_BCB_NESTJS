@@ -14,8 +14,10 @@ export class AdminUserService {
     private readonly repository: Repository<AdminUser>,
   ) {}
 
-  findAll(query: ListAdminUsersDto, actor: Record<string, unknown>) {
-    this.assertCanView(actor);
+  // PUBLIC — no role check here, because POST /admin/admin-user/list was made public
+  // (see admin-user.controller.ts). Before production, take `actor` back as a
+  // parameter and call this.assertCanView(actor) first, like findOne() does.
+  findAll(query: ListAdminUsersDto) {
     const qb = this.repository.createQueryBuilder('admin_user').orderBy('admin_user.createdAt', 'DESC');
 
     if (query.role) {

@@ -10,6 +10,9 @@ import { RegistrationOrchestratorService, RegistrationStep } from './registratio
 import { OtpService } from '../otp/otp.service';
 import { KeycloakService } from '../keycloak/keycloak.service';
 import { DeviceService } from '../device/device.service';
+import { InternalEventBusService } from '../../../internal-events/internal-event-bus.service';
+import { USER_REGISTERED_EVENT, UserRegisteredEvent } from '../events/user-registered.event';
+
 
 @Injectable()
 export class RegistrationService {
@@ -20,6 +23,8 @@ export class RegistrationService {
     private readonly otpService: OtpService,
     private readonly keycloakService: KeycloakService,
     private readonly deviceService: DeviceService,
+    private readonly eventBus: InternalEventBusService,
+
   ) {}
 
   findAll() {
@@ -147,6 +152,11 @@ export class RegistrationService {
     this.requireStep(attempt, RegistrationStep.DEVICE_REGISTERED);
 
     await this.orchestrator.advance(attemptId, RegistrationStep.COMPLETED);
+      this.eventBus.publish(
+      USER_REGISTERED_EVENT,
+      new UserRegisteredEvent(attempt.keycloakUserId as string, attempt.mobileNumber),
+    );
+
 
     return {
       attemptId,

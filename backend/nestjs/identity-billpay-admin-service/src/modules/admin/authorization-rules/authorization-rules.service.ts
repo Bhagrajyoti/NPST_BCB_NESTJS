@@ -6,6 +6,12 @@ import { CreateAuthorizationRuleDto } from './dto/create-authorization-rule.dto'
 import { UpdateAuthorizationRuleDto } from './dto/update-authorization-rule.dto';
 import { AuthorizationRuleHistory } from './entities/authorization-rule-history.entity';
 import { AuthorizationRule } from './entities/authorization-rule.entity';
+import { InternalEventBusService } from '../../../internal-events/internal-event-bus.service';
+import {
+  ADMIN_ACTION_AUDITED_EVENT,
+  AdminActionAuditedEvent,
+} from '../events/admin-action-audited.event';
+
 
 const VIEW_ROLES = ['BANK_SUPER_ADMIN', 'BANK_ADMIN'];
 
@@ -16,6 +22,8 @@ export class AuthorizationRulesService {
     private readonly rules: Repository<AuthorizationRule>,
     @InjectRepository(AuthorizationRuleHistory)
     private readonly history: Repository<AuthorizationRuleHistory>,
+    private readonly eventBus: InternalEventBusService,
+
   ) {}
 
   findAll(actor: Record<string, unknown>) {
@@ -60,6 +68,10 @@ export class AuthorizationRulesService {
         changedByKeycloakUserId: actorKeycloakUserId,
       }),
     );
+      this.eventBus.publish(
+      ADMIN_ACTION_AUDITED_EVENT,
+      new AdminActionAuditedEvent(actorKeycloakUserId, 'AUTHORIZATION_RULE_CREATED', rule.id),
+    );
 
     return rule;
   }
@@ -93,6 +105,11 @@ export class AuthorizationRulesService {
         changedByKeycloakUserId: actorKeycloakUserId,
       }),
     );
+        this.eventBus.publish(
+      ADMIN_ACTION_AUDITED_EVENT,
+      new AdminActionAuditedEvent(actorKeycloakUserId, 'AUTHORIZATION_RULE_UPDATED', rule.id),
+    );
+
 
     return rule;
   }
@@ -116,6 +133,11 @@ export class AuthorizationRulesService {
     );
 
     await this.rules.softDelete(id);
+        this.eventBus.publish(
+      ADMIN_ACTION_AUDITED_EVENT,
+      new AdminActionAuditedEvent(actorKeycloakUserId, 'AUTHORIZATION_RULE_DEACTIVATED', id),
+    );
+
     return { id, deactivated: true };
   }
 
