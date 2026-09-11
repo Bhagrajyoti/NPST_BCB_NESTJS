@@ -1,16 +1,17 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from 'nest-keycloak-connect';
+import { Auth } from '../../../common/decorators/auth.decorator';
 import { CreateEmployeeDto, UpdateEmployeeRoleDto } from '../dto/employee.dto';
 import { EmployeesService } from '../services/employees.service';
 
 @ApiTags('RBAC — Employees')
+@Auth()
 @Controller('employees')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Post('create')
-  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create employee',
     description:
@@ -18,15 +19,11 @@ export class EmployeesController {
       'bank admins can assign only delegated roles that are below their hierarchy level.',
   })
   @ApiResponse({ status: 201, description: 'Employee created in Keycloak and local DB' })
-  create(
-    @Body() dto: CreateEmployeeDto,
-    @AuthenticatedUser() user: Record<string, unknown>,
-  ) {
+  create(@Body() dto: CreateEmployeeDto, @AuthenticatedUser() user: Record<string, unknown>) {
     return this.employeesService.create(dto, user);
   }
 
   @Post('update-role')
-  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update employee role',
     description:

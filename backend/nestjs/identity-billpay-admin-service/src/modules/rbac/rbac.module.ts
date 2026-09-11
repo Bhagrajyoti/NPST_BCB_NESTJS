@@ -17,6 +17,7 @@ import { EmployeesService } from './services/employees.service';
 import { PermissionsService } from './services/permissions.service';
 import { RolesService } from './services/roles.service';
 import { UsersAccessService } from './services/users-access.service';
+import { PermissionCatalogueSeeder } from './permission-catalogue.seeder';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { UsersAccessService } from './services/users-access.service';
     EmployeesService,
     UsersAccessService,
     SuperadminGuard,
+    PermissionCatalogueSeeder,
   ],
 })
 export class RbacModule {}
