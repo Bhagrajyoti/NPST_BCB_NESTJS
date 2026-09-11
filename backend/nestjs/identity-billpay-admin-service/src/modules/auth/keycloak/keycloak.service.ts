@@ -206,11 +206,24 @@ export class KeycloakService {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   }
 
+  /**
+   * Idempotent: if `payload.name` is already a realm role (e.g. one of the standard
+   * BANK_SUPER_ADMIN/BANK_ADMIN/BANK_MAKER/BANK_CHECKER roles a realm is commonly
+   * pre-provisioned with), adopts it instead of failing — Keycloak's POST /roles 409s on a
+   * name that already exists, and that used to surface as an opaque 500 all the way up
+   * through RolesService.create().
+   */
   async createRealmRole(payload: {
     name: string;
     description?: string;
   }): Promise<{ id: string; name: string }> {
     const token = await this.getAdminAccessToken();
+
+    const existing = await this.findRealmRoleByName(payload.name, token);
+    if (existing) {
+      return existing;
+    }
+
     await firstValueFrom(
       this.httpService.post(
         `${this.adminBaseUrl()}/roles`,
@@ -227,6 +240,27 @@ export class KeycloakService {
     );
 
     return { id: data.id, name: data.name };
+  }
+
+  /** Read-only lookup — never creates anything. Returns null on a 404, rethrows anything else. */
+  private async findRealmRoleByName(
+    name: string,
+    token: string,
+  ): Promise<{ id: string; name: string } | null> {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<{ id: string; name: string }>(
+          `${this.adminBaseUrl()}/roles/${encodeURIComponent(name)}`,
+          { headers: this.adminHeaders(token) },
+        ),
+      );
+      return { id: data.id, name: data.name };
+    } catch (error) {
+      if ((error as AxiosError).response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async updateRealmRole(
