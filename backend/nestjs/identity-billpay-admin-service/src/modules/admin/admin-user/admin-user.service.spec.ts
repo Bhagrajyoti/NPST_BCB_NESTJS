@@ -31,24 +31,20 @@ describe('AdminUserService', () => {
   });
 
   describe('findAll', () => {
-    it('rejects an actor without BANK_SUPER_ADMIN or BANK_ADMIN', () => {
-      expect(() => service.findAll({}, bankMaker)).toThrow(ForbiddenException);
-    });
-
-    it('allows BANK_ADMIN and returns the query results', async () => {
-      const result = await service.findAll({}, bankAdmin);
+    it('is public — returns the query results without any caller or role check', async () => {
+      const result = await service.findAll({});
       expect(result).toEqual([{ id: 'admin-user-1' }]);
     });
 
     it('filters by role when provided', async () => {
-      await service.findAll({ role: 'BANK_MAKER' }, superAdmin);
+      await service.findAll({ role: 'BANK_MAKER' });
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('admin_user.roleName = :role', {
         role: 'BANK_MAKER',
       });
     });
 
     it('filters by search term across username and email', async () => {
-      await service.findAll({ search: 'ravi' }, superAdmin);
+      await service.findAll({ search: 'ravi' });
       expect(queryBuilder.andWhere).toHaveBeenCalledWith(
         '(admin_user.username LIKE :search OR admin_user.email LIKE :search)',
         { search: '%ravi%' },
@@ -56,7 +52,7 @@ describe('AdminUserService', () => {
     });
 
     it('applies no filters when none are given', async () => {
-      await service.findAll({}, superAdmin);
+      await service.findAll({});
       expect(queryBuilder.andWhere).not.toHaveBeenCalled();
     });
   });

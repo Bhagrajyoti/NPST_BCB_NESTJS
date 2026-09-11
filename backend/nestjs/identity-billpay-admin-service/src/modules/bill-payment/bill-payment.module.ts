@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { InternalEventBusModule } from '../../internal-events/internal-event-bus.module';
+import { AuditOutboxModule } from '../../clients/audit-outbox/audit-outbox.module';
+import { BillPaymentEventsAuditListener } from './bill-payment-events-audit.listener';
 import { BillerController } from './biller/biller.controller';
 import { BillerService } from './biller/biller.service';
 import { BillerRegistration } from './biller/entities/biller-registration.entity';
@@ -13,13 +16,18 @@ import { BillController } from './bill/controller/bill.controller';
 import { BillService } from './bill/service/bill.service';
 import { BbpsAdapter } from './payment/adapter/bbps.adapter';
 import { MockBbpsAdapter } from './payment/adapter/mock-bbps.adapter';
+import { DemoBbpsData } from './demo/entities/demo-bbps-data.entity';
+import { DemoBbpsDataSeeder } from './demo/demo-bbps-data.seeder';
 @Module({
   imports: [
+    InternalEventBusModule,
+    AuditOutboxModule,
     TypeOrmModule.forFeature([
       BillerRegistration,
       BillPayment,
       BillSchedule,
       MockBill,
+      DemoBbpsData,
     ]),
   ],
   controllers: [
@@ -32,6 +40,8 @@ import { MockBbpsAdapter } from './payment/adapter/mock-bbps.adapter';
   PaymentService,
   BillScheduleService,
   BillService,
+  DemoBbpsDataSeeder,
+  BillPaymentEventsAuditListener,
  MockBbpsAdapter,
   {
     provide: 'BBPS_ADAPTER',

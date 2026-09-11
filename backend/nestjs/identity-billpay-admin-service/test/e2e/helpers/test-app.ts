@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'crypto';
 import * as supertest from 'supertest';
 import { KeycloakService } from '../../../src/modules/auth/keycloak/keycloak.service';
+import { LoggingInterceptor } from '../../../src/common/interceptors/logging.interceptor';
+import { ResponseTransformInterceptor } from '../../../src/common/interceptors/response-transform.interceptor';
 import { TestAppModule } from './test-app.module';
 
 export const TEST_SUPERADMIN = {
@@ -15,6 +17,14 @@ export const TEST_BANK_ADMIN = {
   realm_access: { roles: ['BANK_ADMIN'] },
 };
 
+export const TEST_NO_ROLE = {
+  sub: '33333333-3333-3333-3333-333333333333',
+  realm_access: { roles: [] as string[] },
+};
+
+export const mockBbpsAdapter = {
+  pay: jest.fn().mockResolvedValue({ status: 'SUCCESS', referenceId: 'TEST-BBPS-REF' }),
+};
 
 export const mockKeycloakService = {
   login: jest.fn().mockResolvedValue({
@@ -26,6 +36,10 @@ export const mockKeycloakService = {
     scope: 'email profile',
   }),
   logout: jest.fn().mockResolvedValue({ loggedOut: true }),
+  signup: jest.fn().mockImplementation(async (dto: { username: string }) => ({
+    keycloakUserId: randomUUID(),
+    username: dto.username,
+  })),
   createRealmRole: jest.fn().mockImplementation(async (payload: { name: string }) => ({
     id: '22222222-2222-2222-2222-222222222222',
     name: payload.name,
@@ -50,11 +64,15 @@ export async function createTestApp(
   })
     .overrideProvider(KeycloakService)
     .useValue(mockKeycloakService)
+    .overrideProvider('BBPS_ADAPTER')
+    .useValue(mockBbpsAdapter)
     .compile();
 
   const app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // Matches main.ts — every success response comes back as { success, data, ... }.
+  app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseTransformInterceptor());
 
   app.use((req: { user?: unknown }, _res: unknown, next: () => void) => {
     req.user = actor;
@@ -69,6 +87,7 @@ export function authedRequest(app: INestApplication) {
   const server = supertest(app.getHttpServer());
   return {
     post: (path: string) => server.post(path).set('Authorization', 'Bearer test-access-token'),
+    get: (path: string) => server.get(path).set('Authorization', 'Bearer test-access-token'),
   };
 }
 
