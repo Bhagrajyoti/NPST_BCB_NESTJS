@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BankAccount } from './entities/bank-account.entity';
+import { hashPin } from '../../../common/utils/pin-hash.util';
 
 const DEMO_ROWS: Array<Omit<BankAccount, 'id' | 'createdAt' | 'updatedAt'>> = [
   {
@@ -16,6 +17,9 @@ const DEMO_ROWS: Array<Omit<BankAccount, 'id' | 'createdAt' | 'updatedAt'>> = [
     debitCardCvv: '123',
     debitCardExpiry: '09/28',
     status: 'ACTIVE',
+    // Pre-set to "1234" so POST /auth/registration/verify-atm-pin has something to test
+    // against immediately, without calling set-atm-pin first.
+    atmPinHash: hashPin('1234'),
   },
   {
     mobileNumber: '9876543210',
@@ -29,6 +33,7 @@ const DEMO_ROWS: Array<Omit<BankAccount, 'id' | 'createdAt' | 'updatedAt'>> = [
     debitCardCvv: '456',
     debitCardExpiry: '03/27',
     status: 'ACTIVE',
+    atmPinHash: null,
   },
   {
     mobileNumber: '9000000001',
@@ -42,6 +47,7 @@ const DEMO_ROWS: Array<Omit<BankAccount, 'id' | 'createdAt' | 'updatedAt'>> = [
     debitCardCvv: '789',
     debitCardExpiry: '11/29',
     status: 'ACTIVE',
+    atmPinHash: null,
   },
 ];
 

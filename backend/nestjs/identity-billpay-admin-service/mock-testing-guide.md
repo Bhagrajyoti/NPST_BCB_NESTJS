@@ -204,7 +204,45 @@ any endpoint; there's no code path that serializes it into a response. That's de
 what `activate-mobile` below checks the caller actually knows, so returning it here would make
 that check pointless.
 
-### 7.1 Activating a mobile number against an account
+### 7.1 Setting and verifying an ATM PIN (before activate-mobile)
+
+**`POST`** `/auth/registration/set-atm-pin` and **`POST`** `/auth/registration/verify-atm-pin` —
+same controller/route group, both public. Complete these **before** `activate-mobile` (§7.2) —
+they let the customer prove they know the account's ATM PIN, separately from the debit-card
+details `activate-mobile` checks. Only a scrypt hash of the PIN is ever stored
+(`bank_account.atm_pin_hash`, same hashing utility as customer MPIN —
+[pin-hash.util.ts](src/common/utils/pin-hash.util.ts)); no endpoint ever returns it.
+
+### Request — set
+```json
+{ "mobileNumber": "9876543210", "accountNumber": "10023456789012", "atmPin": "1234" }
+```
+### Success Response
+```json
+{ "success": true, "message": "ATM PIN set successfully" }
+```
+
+### Request — verify
+```json
+{ "mobileNumber": "9876543210", "accountNumber": "10023456789012", "atmPin": "1234" }
+```
+### Success Response
+```json
+{ "verified": true }
+```
+A wrong PIN still returns `201` with `{ "verified": false }` — it's not treated as an error, same
+convention as `POST /auth/credential/verify`.
+
+**Errors:** `404` — no `bank_account` row for that `mobileNumber` + `accountNumber` pair (both
+endpoints) · `400` — `atmPin` isn't exactly 4 digits, or (verify only) no PIN has been set for
+this account yet.
+
+The seeder pre-sets PIN `1234` on the first ICICI demo row (`9876543210` /
+`10023456789012`) **only for freshly-seeded databases** — since the seeder only inserts rows
+that don't already exist, an environment that already had this row before this feature shipped
+won't have it backfilled; call `set-atm-pin` first in that case.
+
+### 7.2 Activating a mobile number against an account
 
 **`POST`** `/auth/registration/activate-mobile` — same controller/route group as `create` above.
 Send the `mobileNumber` back with one `accountNumber` from `registeredAccounts` plus the debit
@@ -249,7 +287,7 @@ exactly (e.g. right card, wrong mobile number — or right mobile number, wrong/
 Try `accountNumber: "20034567890123"` (HDFC) with the ICICI card above to see the `400` case, or
 any valid pair with `debitCardCvv: "000"` to see a wrong-CVV `400`.
 
-### 7.2 Listing every mock customer at once
+### 7.3 Listing every mock customer at once
 
 **`POST`** `/customer/list` — public, **no request body**. Skips the `mobileNumber` lookup
 entirely and just returns every `bank_account` row directly — useful for browsing/seeding checks
@@ -310,6 +348,11 @@ curl -X POST http://localhost:3000/api/v1/bill-payment/payment/retry \
 | `registration/create` with `9000000001` (1 account on file) | `registeredAccounts` has 1 entry | ✅ live |
 | `registration/create` with an unseeded mobile number | `registeredAccounts: []`, still `201` | ✅ live |
 | `registration/create` with an invalid mobile number (e.g. `123`) | `400`, no `panOrCif` field accepted/required anymore | ✅ live |
+| `set-atm-pin` then `verify-atm-pin` with the same 4-digit PIN | `verify-atm-pin` returns `{ verified: true }` | ✅ (e2e test) |
+| `verify-atm-pin` with the wrong PIN | `201`, `{ verified: false }` — not an error | ✅ (e2e test) |
+| `set-atm-pin`/`verify-atm-pin` with an unknown mobile/accountNumber pair | `404` | ✅ (e2e test) |
+| `set-atm-pin` with a non-4-digit PIN | `400` | ✅ (e2e test) |
+| `verify-atm-pin` before any `set-atm-pin` call for that account | `400` | ✅ live |
 | `activate-mobile` with the right mobile + accountNumber + matching card/expiry/CVV | `201`, `success: true`, `"Successfully connected"` | ✅ live |
 | `activate-mobile` with a mobile/accountNumber pair that doesn't exist | `404` | ✅ live |
 | `activate-mobile` with a real accountNumber but someone else's card, or a right card with wrong CVV/expiry | `400` | ✅ live |

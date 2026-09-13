@@ -10,6 +10,8 @@ import { InitRegistrationDto } from './dto/init-registration.dto';
 import { VerifyRegistrationOtpDto } from './dto/verify-registration-otp.dto';
 import { CreateCredentialsDto } from './dto/create-credentials.dto';
 import { RegisterAttemptDeviceDto } from './dto/register-attempt-device.dto';
+import { SetAtmPinDto } from './dto/set-atm-pin.dto';
+import { VerifyAtmPinDto } from './dto/verify-atm-pin.dto';
 import { ActivateMobileDto } from './dto/activate-mobile.dto';
 
 @ApiTags('Mobile — Registration (Customer onboarding)', 'Auth — Registration')
@@ -68,13 +70,45 @@ export class RegistrationController {
       'Start customer registration',
       'Step 1 of 5. Creates a registration attempt with step INIT using only the customer’s ' +
         'mobile number, and returns every bank account already on file for that number ' +
-        '(registeredAccounts — masked account/card numbers, no CVV). Public — no Bearer token ' +
+        '(registeredAccounts — full account/card numbers, no CVV). Public — no Bearer token ' +
         'required.',
     ),
   )
   @ApiResponse({ status: 201, description: 'Registration started, with registeredAccounts for this mobile number' })
   create(@Body() dto: InitRegistrationDto) {
     return this.service.create(dto);
+  }
+
+  @Public()
+  @Post('set-atm-pin')
+  @ApiOperation(
+    mobileCustomerOp(
+      'Set ATM PIN for an account',
+      'Sets (or replaces) the 4-digit ATM PIN for one of the accounts returned by ' +
+        '/auth/registration/create. Complete this — and verify-atm-pin below — before calling ' +
+        'activate-mobile. Only a hash is ever stored. Public — no Bearer token required.',
+    ),
+  )
+  @ApiResponse({ status: 201, description: '{ success: true, message: "ATM PIN set successfully" }' })
+  @ApiResponse({ status: 404, description: 'No account found for this mobile number and account number' })
+  setAtmPin(@Body() dto: SetAtmPinDto) {
+    return this.service.setAtmPin(dto);
+  }
+
+  @Public()
+  @Post('verify-atm-pin')
+  @ApiOperation(
+    mobileCustomerOp(
+      'Verify ATM PIN for an account',
+      'Verifies a 4-digit ATM PIN previously set via set-atm-pin. Do this before calling ' +
+        'activate-mobile. Public — no Bearer token required.',
+    ),
+  )
+  @ApiResponse({ status: 201, description: '{ verified: boolean }' })
+  @ApiResponse({ status: 400, description: 'No ATM PIN set for this account yet' })
+  @ApiResponse({ status: 404, description: 'No account found for this mobile number and account number' })
+  verifyAtmPin(@Body() dto: VerifyAtmPinDto) {
+    return this.service.verifyAtmPin(dto);
   }
 
   @Public()

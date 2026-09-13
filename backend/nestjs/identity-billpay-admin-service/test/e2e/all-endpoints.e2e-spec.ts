@@ -119,6 +119,51 @@ describe('All API endpoints (e2e)', () => {
     });
   });
 
+  describe('Auth — Registration ATM PIN', () => {
+    const mobileNumber = '9876543210';
+    const accountNumber = '10023456789012';
+
+    it('set-atm-pin then verify-atm-pin — correct PIN verifies true', async () => {
+      await publicRequest(app)
+        .post('/api/v1/auth/registration/set-atm-pin')
+        .send({ mobileNumber, accountNumber, atmPin: '5678' })
+        .expect(201);
+
+      const res = await publicRequest(app)
+        .post('/api/v1/auth/registration/verify-atm-pin')
+        .send({ mobileNumber, accountNumber, atmPin: '5678' })
+        .expect(201);
+      expect(res.body.data.verified).toBe(true);
+    });
+
+    it('verify-atm-pin with the wrong PIN returns verified: false (not an error)', async () => {
+      await publicRequest(app)
+        .post('/api/v1/auth/registration/set-atm-pin')
+        .send({ mobileNumber, accountNumber, atmPin: '1111' })
+        .expect(201);
+
+      const res = await publicRequest(app)
+        .post('/api/v1/auth/registration/verify-atm-pin')
+        .send({ mobileNumber, accountNumber, atmPin: '2222' })
+        .expect(201);
+      expect(res.body.data.verified).toBe(false);
+    });
+
+    it('set-atm-pin for an unknown mobile/account pair is a 404', async () => {
+      await publicRequest(app)
+        .post('/api/v1/auth/registration/set-atm-pin')
+        .send({ mobileNumber: '9111111199', accountNumber: '00000000000000', atmPin: '1234' })
+        .expect(404);
+    });
+
+    it('set-atm-pin rejects a non-4-digit PIN', async () => {
+      await publicRequest(app)
+        .post('/api/v1/auth/registration/set-atm-pin')
+        .send({ mobileNumber, accountNumber, atmPin: '12' })
+        .expect(400);
+    });
+  });
+
   describe('Auth — Credential', () => {
     const keycloakUserId = '334b032c-7468-47fa-82a3-8204b80913a2';
 

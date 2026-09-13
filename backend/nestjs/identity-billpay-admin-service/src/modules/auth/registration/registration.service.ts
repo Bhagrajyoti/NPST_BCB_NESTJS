@@ -6,6 +6,8 @@ import { InitRegistrationDto } from './dto/init-registration.dto';
 import { VerifyRegistrationOtpDto } from './dto/verify-registration-otp.dto';
 import { CreateCredentialsDto } from './dto/create-credentials.dto';
 import { RegisterAttemptDeviceDto } from './dto/register-attempt-device.dto';
+import { SetAtmPinDto } from './dto/set-atm-pin.dto';
+import { VerifyAtmPinDto } from './dto/verify-atm-pin.dto';
 import { ActivateMobileDto } from './dto/activate-mobile.dto';
 import { RegistrationOrchestratorService, RegistrationStep } from './registration-orchestrator.service';
 import { OtpService } from '../otp/otp.service';
@@ -51,6 +53,21 @@ export class RegistrationService {
     const registeredAccounts = await this.bankAccountService.findByMobileNumber(dto.mobileNumber);
 
     return { ...attempt, registeredAccounts };
+  }
+
+  /**
+   * Sets the ATM PIN for one of the mobile number's registered accounts — completed before
+   * activateMobile() below, same "not a saga step" shape as activate-mobile (no attemptId).
+   */
+  async setAtmPin(dto: SetAtmPinDto) {
+    await this.bankAccountService.setAtmPin(dto);
+    return { success: true, message: 'ATM PIN set successfully' };
+  }
+
+  /** Verifies the ATM PIN previously set via setAtmPin() — completed before activateMobile(). */
+  async verifyAtmPin(dto: VerifyAtmPinDto) {
+    const verified = await this.bankAccountService.verifyAtmPin(dto);
+    return { verified };
   }
 
   /**

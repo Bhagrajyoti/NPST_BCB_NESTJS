@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BankAccount } from './entities/bank-account.entity';
+import { hashPin, verifyPin } from '../../../common/utils/pin-hash.util';
 
 export interface RegisteredAccountSummary {
   accountNumber: string;
@@ -25,6 +26,12 @@ export interface VerifyDebitCardInput {
   debitCardNumber: string;
   debitCardExpiry: string;
   debitCardCvv: string;
+}
+
+export interface AtmPinInput {
+  mobileNumber: string;
+  accountNumber: string;
+  atmPin: string;
 }
 
 function toSummary(account: BankAccount): RegisteredAccountSummary {
@@ -72,13 +79,7 @@ export class BankAccountService {
    * claiming, the same way a real "activate via debit card" flow would.
    */
   async verifyDebitCard(input: VerifyDebitCardInput): Promise<RegisteredAccountSummary> {
-    const account = await this.repository.findOne({
-      where: { mobileNumber: input.mobileNumber, accountNumber: input.accountNumber },
-    });
-
-    if (!account) {
-      throw new NotFoundException('No account found for this mobile number and account number');
-    }
+    const account = await this.findAccountOrThrow(input.mobileNumber, input.accountNumber);
 
     const matches =
       account.debitCardNumber === input.debitCardNumber &&
@@ -90,5 +91,34 @@ export class BankAccountService {
     }
 
     return toSummary(account);
+  }
+
+  /**
+   * Sets (or replaces) the ATM PIN for an account — a step customers complete before
+   * POST /auth/registration/activate-mobile. Only the scrypt hash is ever persisted.
+   */
+  async setAtmPin(input: AtmPinInput): Promise<void> {
+    const account = await this.findAccountOrThrow(input.mobileNumber, input.accountNumber);
+    account.atmPinHash = hashPin(input.atmPin);
+    await this.repository.save(account);
+  }
+
+  /** Verifies a submitted ATM PIN against the hash set via setAtmPin(). */
+  async verifyAtmPin(input: AtmPinInput): Promise<boolean> {
+    const account = await this.findAccountOrThrow(input.mobileNumber, input.accountNumber);
+    if (!account.atmPinHash) {
+      throw new BadRequestException(
+        'No ATM PIN set for this account yet — call POST /auth/registration/set-atm-pin first',
+      );
+    }
+    return verifyPin(input.atmPin, account.atmPinHash);
+  }
+
+  private async findAccountOrThrow(mobileNumber: string, accountNumber: string): Promise<BankAccount> {
+    const account = await this.repository.findOne({ where: { mobileNumber, accountNumber } });
+    if (!account) {
+      throw new NotFoundException('No account found for this mobile number and account number');
+    }
+    return account;
   }
 }

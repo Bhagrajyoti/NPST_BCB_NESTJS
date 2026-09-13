@@ -178,6 +178,47 @@ no accounts on file, and also browsable unfiltered (every mobile number at once)
 stored on the row but still never returned by any endpoint — the customer is expected to already
 know it from their physical card, which is exactly what `activate-mobile` checks.
 
+**`POST`** `/auth/registration/set-atm-pin` — Public. Complete this (and `verify-atm-pin` below)
+**before** `activate-mobile`.
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| mobileNumber | String | Yes | 10-digit Indian mobile number |
+| accountNumber | String | Yes | From `registeredAccounts` above |
+| atmPin | String | Yes | Exactly 4 digits |
+
+### Request
+```json
+{ "mobileNumber": "9876543210", "accountNumber": "10023456789012", "atmPin": "1234" }
+```
+
+### Success Response
+```json
+{ "success": true, "message": "ATM PIN set successfully" }
+```
+Only a scrypt hash (`bank_account.atm_pin_hash`) is ever stored — same hashing utility as customer
+MPIN. **Errors:** `404` — no account for that `mobileNumber` + `accountNumber` pair · `400` —
+`atmPin` isn't exactly 4 digits.
+
+**`POST`** `/auth/registration/verify-atm-pin` — Public.
+
+### Request fields
+Same as `set-atm-pin` above.
+
+### Request
+```json
+{ "mobileNumber": "9876543210", "accountNumber": "10023456789012", "atmPin": "1234" }
+```
+
+### Success Response
+```json
+{ "verified": true }
+```
+A wrong PIN still returns `201` with `{ "verified": false }` — not an error, same convention as
+`POST /auth/credential/verify`. **Errors:** `404` — no account for that pair · `400` — `atmPin`
+isn't exactly 4 digits, or no PIN has been set yet for this account (call `set-atm-pin` first).
+
 **`POST`** `/auth/registration/activate-mobile` — Public.
 
 ### Request fields
@@ -454,6 +495,7 @@ reserved for future use — no endpoint currently sets it.
 | debit_card_cvv | VARCHAR | Stored only — **never** returned by any endpoint; `activate-mobile` verifies it as input instead |
 | debit_card_expiry | VARCHAR | `MM/YY` |
 | status | VARCHAR, default `ACTIVE` | |
+| atm_pin_hash | VARCHAR, nullable | scrypt hash set by `set-atm-pin`, checked by `verify-atm-pin` — never returned by any endpoint |
 | created_at / updated_at | TIMESTAMP | |
 
 **`otp_challenge`**
@@ -548,6 +590,10 @@ POST /auth/login  (clientId: "mobile-app", username: mobileNumber, password from
 | OTP: expired challenge | `400` even with the correct code | ✅ (unit test) |
 | Customer passes another customer's `userId` to `credential/get` | `403` (unless caller is `BANK_ADMIN`/`BANK_SUPER_ADMIN`) | ✅ (unit test) |
 | `POST /customer/list` with no body, no token | `201`, full array of mock customer/account rows, no `debitCardCvv` field anywhere in it | ✅ (e2e test) |
+| `set-atm-pin` then `verify-atm-pin` with the same PIN | `{ verified: true }` | ✅ (e2e test) |
+| `verify-atm-pin` with the wrong PIN | `201`, `{ verified: false }` — not an error | ✅ (e2e test) |
+| `set-atm-pin`/`verify-atm-pin` for an unknown mobile/accountNumber pair | `404` | ✅ (e2e test) |
+| `set-atm-pin` with a non-4-digit PIN | `400` | ✅ (e2e test) |
 
 ## 14. Frontend Integration Note
 

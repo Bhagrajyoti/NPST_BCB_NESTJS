@@ -45,6 +45,11 @@ export class BankAccount {
   @Column({ default: 'ACTIVE' })
   status: string;
 
+  // Hashed (scrypt, see mpin-hash.util.ts) — never the plaintext PIN. Null until
+  // POST /auth/registration/set-atm-pin is called for this account.
+  @Column({ name: 'atm_pin_hash', type: 'varchar', length: 255, nullable: true })
+  atmPinHash: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
