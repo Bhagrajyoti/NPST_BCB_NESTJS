@@ -45,18 +45,8 @@ JSON blocks below show `data`. Errors are unwrapped: `{ "statusCode", "path", "t
 Read-only. `POST /admin/admin-user/*` never creates an account — see §7 for how one actually
 gets created and synced into this table.
 
-**`POST`** `/admin/admin-user/list`
-
-### Request fields
-| Field | Type | Required | Description |
-|---|---|---|---|
-| role | String | No | One of `BANK_SUPER_ADMIN`, `BANK_ADMIN`, `BANK_MAKER`, `BANK_CHECKER` |
-| search | String | No | Matched against `username` OR `email` with `LIKE %search%` |
-
-### Request
-```json
-{ "role": "BANK_ADMIN" }
-```
+**`POST`** `/admin/admin-user/list` — no request body, no filters. Returns every `admin_user`
+row, ordered by `createdAt` descending.
 
 ### Success Response
 ```json
@@ -79,7 +69,8 @@ gets created and synced into this table.
 ]
 ```
 
-**Auth:** `BANK_SUPER_ADMIN` or `BANK_ADMIN` — anything else → `403`.
+**Auth:** `BANK_SUPER_ADMIN` only — `BANK_ADMIN` now gets `403` here too (tightened; `BANK_ADMIN`
+still keeps view access on `get` below, just not the full listing).
 
 **What to use, and where:** `keycloakUserId` is the same value used as `userId` elsewhere in this
 API (`/auth/credential/*`, `/auth/device/*`, `/auth/corporate-hierarchy/*`) — it IS that person's
@@ -321,7 +312,13 @@ role ∈ {BANK_SUPER_ADMIN, BANK_ADMIN, BANK_MAKER, BANK_CHECKER}?
 admin_user row saved/updated      ignored — no admin_user row
 ```
 Nothing in the Admin module itself writes to `admin_user` — it is purely the read side of this
-pipeline.
+pipeline. **`list` returning `[]` almost always means exactly what it looks like: no employee
+with an admin-portal role has been created (via `POST /employees/create`) on *this* environment's
+database yet** — not a bug. Verified live: the sync fires correctly end to end (create an
+employee with `roleName` `BANK_ADMIN`/`BANK_MAKER`/`BANK_CHECKER`/`BANK_SUPER_ADMIN`, its
+`admin_user` row appears immediately). If you're pointed at a fresh or otherwise-empty database
+(e.g. a separately-deployed instance that's never had `/employees/create` called against it),
+`[]` is the correct answer, not a sync failure.
 
 ## 8. Validation & Error Handling
 
@@ -341,7 +338,9 @@ pipeline.
 | `BANK_ADMIN` lists/gets/views history | `200`, same data a superadmin would see | ✅ live |
 | Update a rule | `version` becomes 2, history gains a row with `changeReason` | ✅ live |
 | Deactivate a rule | `{ deactivated: true }`, later `get` → `404` | ✅ live |
-| `admin-user/list` with `role` filter | Only matching `roleName` rows returned | ✅ live |
+| `admin-user/list` with no body, as `BANK_SUPER_ADMIN` | `201`, every `admin_user` row | ✅ live |
+| `admin-user/list` as `BANK_ADMIN` | `403` (super-admin only now) | ✅ live |
+| `admin-user/get` as `BANK_ADMIN` | `201` (view access unchanged) | ✅ (e2e test) |
 | `GET /admin/reporting` with query params | Always `[]`, params ignored | ✅ live — confirms it's a stub |
 
 ## 10. Frontend Integration Note

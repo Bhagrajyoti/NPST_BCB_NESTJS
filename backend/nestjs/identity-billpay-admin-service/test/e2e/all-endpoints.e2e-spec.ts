@@ -631,6 +631,21 @@ describe('All API endpoints (e2e)', () => {
       await authedRequest(noRoleApp).post('/api/v1/admin/admin-user/list').send({}).expect(403);
       await noRoleApp.close();
     });
+
+    it('rejects BANK_ADMIN from /list — listing is BANK_SUPER_ADMIN only', async () => {
+      const bankAdminApp = await createTestApp(TEST_BANK_ADMIN);
+      await authedRequest(bankAdminApp).post('/api/v1/admin/admin-user/list').send({}).expect(403);
+      await bankAdminApp.close();
+    });
+
+    it('still allows BANK_ADMIN on /get (view access, unchanged)', async () => {
+      const bankAdminApp = await createTestApp(TEST_BANK_ADMIN);
+      await authedRequest(bankAdminApp)
+        .post('/api/v1/admin/admin-user/get')
+        .send({ id: seededId })
+        .expect(201);
+      await bankAdminApp.close();
+    });
   });
 
   describe('Admin — Authorization Rules', () => {
