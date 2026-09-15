@@ -13,6 +13,7 @@ import { AuthModule } from '../../../src/modules/auth/auth.module';
 import { RbacModule } from '../../../src/modules/rbac/rbac.module';
 import { AdminModule } from '../../../src/modules/admin/admin.module';
 import { BillPaymentModule } from '../../../src/modules/bill-payment/bill-payment.module';
+import { AuditOutboxModule } from '../../../src/clients/audit-outbox/audit-outbox.module';
 import { HealthController } from '../../../src/common/health/health.controller';
 
 @Module({
@@ -32,6 +33,7 @@ import { HealthController } from '../../../src/common/health/health.controller';
       useClass: KeycloakConnectConfigService,
     }),
     TerminusModule,
+    AuditOutboxModule,
     AuthModule,
     RbacModule,
     AdminModule,

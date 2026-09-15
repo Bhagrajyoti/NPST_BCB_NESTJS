@@ -5,7 +5,8 @@ API & Technical Documentation
 Related guides: [api endpoint guide.md](api%20endpoint%20guide.md) (`/auth/*`),
 [adminservice.md](adminservice.md) (`/admin/*`),
 [billpaymentservice.md](billpaymentservice.md) (`/bill-payment/*`),
-[mock-testing-guide.md](mock-testing-guide.md) (local/offline testing).
+[mock-testing-guide.md](mock-testing-guide.md) (local/offline testing),
+[debugging-guide.md](debugging-guide.md) (full API catalog + how to debug any endpoint).
 
 ## 1. Overview
 

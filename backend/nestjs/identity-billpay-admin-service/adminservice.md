@@ -5,7 +5,8 @@ API & Technical Documentation
 Related guides: [api endpoint guide.md](api%20endpoint%20guide.md) (`/auth/*`),
 [rbacservice.md](rbacservice.md) (`/employees`, `/roles`, ...),
 [billpaymentservice.md](billpaymentservice.md) (`/bill-payment/*`),
-[mock-testing-guide.md](mock-testing-guide.md) (local/offline testing).
+[mock-testing-guide.md](mock-testing-guide.md) (local/offline testing),
+[debugging-guide.md](debugging-guide.md) (full API catalog + how to debug any endpoint).
 
 ## 1. Overview
 
@@ -97,7 +98,7 @@ One `admin_user` row, same shape as a `list` array element.
 
 A per-CIF monetary threshold — payments over `threshold` for that `cif` require a second
 approval elsewhere in the platform. Every write is versioned: `create`/`update`/`deactivate` each
-append a row to `authorization_rule_history` (§8), so nothing is silently overwritten.
+append a row to `authorization_rule_history` (§6), so nothing is silently overwritten.
 
 **`POST`** `/admin/authorization-rules/create`
 
@@ -135,7 +136,7 @@ append a row to `authorization_rule_history` (§8), so nothing is silently overw
 (`createdByKeycloakUserId` is `test-bank-superadmin`'s own `sub` — the caller's identity from the
 Bearer token, not something you send.)
 
-**Auth:** `BANK_SUPER_ADMIN` only — a `BANK_ADMIN` token gets `403` here (verified: see §9).
+**Auth:** `BANK_SUPER_ADMIN` only — a `BANK_ADMIN` token gets `403` here (verified: see §10).
 
 **What to use, and where:** `id` → every later `get`/`history`/`update`/`deactivate` call on this
 rule.
@@ -250,7 +251,7 @@ Soft-deletes the rule (`deletedAt` set) — it drops out of `list`/`get` (`404` 
 > **This is a stub.** [`ReportingService.query()`](src/modules/admin/reporting/reporting.service.ts)
 > is `async query(_filters) { return []; }` — wired, authenticated, correctly wrapped/shaped, but
 > there is no real reporting logic behind it, and the date filters do nothing. Confirmed live —
-> see §9. Don't build against this expecting real rows.
+> see §10. Don't build against this expecting real rows.
 
 ## 6. Database Tables
 
@@ -320,7 +321,64 @@ employee with `roleName` `BANK_ADMIN`/`BANK_MAKER`/`BANK_CHECKER`/`BANK_SUPER_AD
 (e.g. a separately-deployed instance that's never had `/employees/create` called against it),
 `[]` is the correct answer, not a sync failure.
 
-## 8. Validation & Error Handling
+## 8. Audit Trail (`audit_outbox`)
+
+`audit_outbox` (schema-per-entity says `admin`, physically just a table in `db1` like everything
+else) implements the transactional-outbox pattern: business actions across the service write a
+row here (via [`AuditOutboxService.record(eventType, payload)`](src/clients/audit-outbox/audit-outbox.service.ts),
+a `@Global()`-provided service, injectable from any module with zero extra imports), and
+[`AuditOutboxRelayJob`](src/clients/audit-outbox/audit-outbox-relay.job.ts) — a cron job running
+every minute — picks up `PENDING` rows and relays them to an external Audit service, retrying up
+to 5 times before marking a row `FAILED`.
+
+**Recording is best-effort and non-blocking** — `AuditOutboxService.record()` catches its own
+errors and only logs them; a failure to write an audit row never fails (or rolls back) the real
+action it's describing.
+
+### What gets recorded
+
+| Event type | Where | 
+|---|---|
+| `AUTH_LOGIN` / `AUTH_LOGOUT` / `AUTH_SIGNUP` | `AuthController` (`src/modules/auth/token`) |
+| `REGISTRATION_STARTED` / `_OTP_VERIFIED` / `_CREDENTIALS_SET` / `_DEVICE_REGISTERED` / `_COMPLETED` / `_ATM_PIN_SET` / `_ATM_PIN_VERIFIED` / `_MOBILE_ACTIVATED` | `RegistrationService` (see [api endpoint guide.md §4](api%20endpoint%20guide.md)) |
+| `CREDENTIAL_UPDATED` / `CREDENTIAL_MPIN_DELETED` | `CredentialService` |
+| `ROLE_CREATED` / `ROLE_UPDATED` / `ROLE_PERMISSIONS_MAPPED` | `RolesService` (rbacservice.md §4) |
+| `PERMISSION_CREATED` | `PermissionsService` (rbacservice.md §3) |
+| `EMPLOYEE_CREATED` / `EMPLOYEE_ROLE_UPDATED` | `EmployeesService` (rbacservice.md §5) |
+| `AUTHORIZATION_RULE_CREATED` / `_UPDATED` / `_DEACTIVATED` | `AuthorizationRulesService` (§4 above) |
+| `PAYMENT_CREATED` / `PAYMENT_RETRIED` | `PaymentService` (billpaymentservice.md) |
+
+Pure reads/lists never write an event — only state-changing actions do.
+
+### Checking it
+
+```bash
+docker exec npst-bcb-mysql mysql -ubcb_user -pbcb_pass db1 -e \
+  "SELECT event_type, status, attempts, payload FROM audit_outbox ORDER BY created_at DESC LIMIT 5;"
+```
+`status: PENDING` rows haven't been relayed yet (next cron tick, within a minute) — expect them to
+cycle to `FAILED` after 5 attempts right now, since **no real Audit service is configured**
+(`AUDIT_SERVICE_URL` is unset in every environment — [`audit.client.ts`](src/clients/audit.client.ts)
+throws immediately instead of pretending to succeed). The rows are still written correctly; only
+the "ship it to an external service" half of the outbox pattern has nothing real to ship to yet.
+
+### Historical backfill
+
+Everything that happened *before* this instrumentation existed (registrations, roles,
+permissions, employees, authorization rules, payments, credentials created earlier in this
+service's life) has no corresponding `audit_outbox` row on its own — the producer code didn't
+exist yet when those actions happened. One-time fix:
+```bash
+npm run backfill:audit-outbox
+```
+[`backfill-audit-outbox.ts`](src/scripts/backfill-audit-outbox.ts) scans every relevant table and
+inserts one row per historical record, with `status: 'SENT'` (so the relay job leaves them alone
+— they're history, not new work to ship) and the real original timestamp preserved in
+`payload.occurredAt` (the row's own `created_at` is when the backfill ran, not when the event
+actually happened). **Run it once** — it has no dedupe key, so running it twice duplicates every
+row. New activity going forward is captured live; this script is not part of normal operation.
+
+## 9. Validation & Error Handling
 
 | Code / status | Where | Meaning |
 |---|---|---|
@@ -329,7 +387,7 @@ employee with `roleName` `BANK_ADMIN`/`BANK_MAKER`/`BANK_CHECKER`/`BANK_SUPER_AD
 | `403` | `authorization-rules/create\|update\|deactivate` | caller isn't `BANK_SUPER_ADMIN` |
 | `404` | `admin-user/get`, `authorization-rules/get\|history\|update\|deactivate` | unknown `id` |
 
-## 9. Testing Scenarios
+## 10. Testing Scenarios
 
 | Scenario | Expected Result | Verified |
 |---|---|---|
@@ -342,8 +400,10 @@ employee with `roleName` `BANK_ADMIN`/`BANK_MAKER`/`BANK_CHECKER`/`BANK_SUPER_AD
 | `admin-user/list` as `BANK_ADMIN` | `403` (super-admin only now) | ✅ live |
 | `admin-user/get` as `BANK_ADMIN` | `201` (view access unchanged) | ✅ (e2e test) |
 | `GET /admin/reporting` with query params | Always `[]`, params ignored | ✅ live — confirms it's a stub |
+| Login/registration/role/employee/rule/payment actions | Each writes a matching `audit_outbox` row | ✅ live — 21 distinct event types confirmed in one session |
+| `npm run backfill:audit-outbox` | Inserts a `SENT` row per pre-existing historical record | ✅ live — 791 rows backfilled |
 
-## 10. Frontend Integration Note
+## 11. Frontend Integration Note
 
 Treat `GET /admin/reporting` as **not implemented** in any UI you build — don't wire a chart or
 table to it yet. For everything else in this module, `id` fields returned from `create`/`list` are

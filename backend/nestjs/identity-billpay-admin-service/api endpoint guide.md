@@ -5,7 +5,7 @@ API & Technical Documentation
 Related guides: [adminservice.md](adminservice.md) (`/admin/*`), [rbacservice.md](rbacservice.md)
 (`/employees`, `/roles`, ...), [billpaymentservice.md](billpaymentservice.md) (`/bill-payment/*`),
 [mock-testing-guide.md](mock-testing-guide.md) (local/offline testing without a real Keycloak
-server).
+server), [debugging-guide.md](debugging-guide.md) (full API catalog + how to debug any endpoint).
 
 ## 1. Overview
 
@@ -106,18 +106,20 @@ Keycloak Admin API, the same as `createUser` everywhere else in this service.
 ```json
 {
   "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ3SHJhV3R2Tkd3dk5f...",
-  "expiresIn": 900,
+  "expiresIn": 86400,
   "refreshExpiresIn": 1800,
   "refreshToken": "eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIxZTQ5OTdiNC03YmYy...",
   "tokenType": "Bearer",
   "scope": "email profile"
 }
 ```
-`expiresIn: 900` — the token is valid for **15 minutes** (`access.token.lifespan` set on the
-`admin-web`/`mobile-app` Keycloak clients — the realm default is still 5 minutes for any other
-client); re-login (or use `refreshToken` against Keycloak directly — this service doesn't expose
-a `/auth/refresh` endpoint) once it expires. `refreshToken` itself is valid for
-`refreshExpiresIn: 1800` (30 minutes).
+`expiresIn: 86400` — the access token is valid for **24 hours** (`access.token.lifespan` set on
+the `admin-web`/`mobile-app` Keycloak clients, and the realm's `ssoSessionMaxLifespan` raised to
+match — a token can never outlive its SSO session, so both had to move together; the realm
+default `accessTokenLifespan` is still 5 minutes for any other client). `refreshToken` is still
+only valid for `refreshExpiresIn: 1800` (30 minutes) — unchanged, and not that it matters: this
+service doesn't expose a `/auth/refresh` endpoint, so once the access token expires the only path
+is re-login via `POST /auth/login`, not a refresh-token exchange.
 
 **What to use, and where:** `accessToken` → `Authorization: Bearer <accessToken>` on every
 protected call below. `refreshToken` → body of `POST /auth/logout`.

@@ -6,6 +6,7 @@ import { GetCredentialDto } from './dto/get-credential.dto';
 import { SetCredentialDto } from './dto/set-credential.dto';
 import { Credential } from './entities/credential.entity';
 import { hashMpin, verifyMpin } from './utils/mpin-hash.util';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class CredentialService {
@@ -13,6 +14,7 @@ export class CredentialService {
     @InjectRepository(Credential)
     private readonly repository: Repository<Credential>,
     private readonly keycloakService: KeycloakService,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   findAll() {
@@ -70,6 +72,12 @@ export class CredentialService {
       }
     }
 
+    await this.auditOutbox.record('CREDENTIAL_UPDATED', {
+      keycloakUserId: dto.userId,
+      passwordUpdated,
+      mpinUpdated: !!mpinRecord,
+    });
+
     return {
       keycloakUserId: dto.userId,
       passwordUpdated,
@@ -96,6 +104,7 @@ export class CredentialService {
       throw new NotFoundException(`No MPIN credential found for Keycloak user ${keycloakUserId}`);
     }
     await this.repository.softDelete(record.id);
+    await this.auditOutbox.record('CREDENTIAL_MPIN_DELETED', { keycloakUserId });
     return { keycloakUserId, deleted: true };
   }
 

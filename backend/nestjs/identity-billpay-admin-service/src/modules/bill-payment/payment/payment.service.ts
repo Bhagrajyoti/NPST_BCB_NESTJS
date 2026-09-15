@@ -12,6 +12,7 @@ import { MockBill } from '../bill/entities/mock-bill.entity';
 import { DemoBbpsData } from '../demo/entities/demo-bbps-data.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BbpsAdapter } from './adapter/bbps.adapter';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 type BillingRecord =
   | { source: 'mock'; record: MockBill }
@@ -31,6 +32,8 @@ export class PaymentService {
 
     @Inject('BBPS_ADAPTER')
     private readonly bbpsAdapter: BbpsAdapter,
+
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   // demo_bbps_data is a fallback, checked only when billerCode+consumerNumber aren't in
@@ -159,6 +162,14 @@ export class PaymentService {
     }
 
     // 7. Return payment result
+    await this.auditOutbox.record('PAYMENT_CREATED', {
+      paymentId: savedPayment.id,
+      billerCode: savedPayment.billerCode,
+      consumerNumber: savedPayment.consumerNumber,
+      amount: savedPayment.amount,
+      status: savedPayment.status,
+    });
+
     return {
       paymentId: savedPayment.id,
       billerCode: savedPayment.billerCode,
@@ -198,6 +209,11 @@ export class PaymentService {
     payment.status = bbpsResponse.status;
     payment.bbpsReferenceId = bbpsResponse.referenceId ?? payment.bbpsReferenceId;
     await this.paymentRepository.save(payment);
+
+    await this.auditOutbox.record('PAYMENT_RETRIED', {
+      paymentId: payment.id,
+      status: payment.status,
+    });
 
     if (bbpsResponse.status === 'SUCCESS') {
       const found = await this.findBillingRecord(payment.billerCode, payment.consumerNumber);

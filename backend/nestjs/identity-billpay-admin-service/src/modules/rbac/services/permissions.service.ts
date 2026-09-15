@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreatePermissionDto } from '../dto/permission.dto';
 import { Permission } from '../entities/permission.entity';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class PermissionsService {
   constructor(
     @InjectRepository(Permission)
     private readonly permissions: Repository<Permission>,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   findAll() {
@@ -32,6 +34,12 @@ export class PermissionsService {
         highRisk: dto.highRisk ?? false,
       }),
     );
+
+    await this.auditOutbox.record('PERMISSION_CREATED', {
+      permissionId: permission.id,
+      code: permission.code,
+      module: permission.module,
+    });
 
     return {
       id: permission.id,

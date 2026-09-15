@@ -4,7 +4,8 @@ API & Technical Documentation
 
 Related guides: [api endpoint guide.md](api%20endpoint%20guide.md) (`/auth/*`),
 [adminservice.md](adminservice.md) (`/admin/*`), [rbacservice.md](rbacservice.md)
-(`/employees`, `/roles`, ...), [billpaymentservice.md](billpaymentservice.md) (`/bill-payment/*`).
+(`/employees`, `/roles`, ...), [billpaymentservice.md](billpaymentservice.md) (`/bill-payment/*`),
+[debugging-guide.md](debugging-guide.md) (full API catalog + how to debug any endpoint).
 
 ## 1. Overview
 
@@ -137,14 +138,17 @@ of rows re-seeded idempotently on every boot by
 [`BankAccountSeeder`](src/modules/auth/bank-account/bank-account.seeder.ts) — same pattern as
 `DemoBbpsDataSeeder` (§6), no manual step needed. Boot log confirms it:
 ```
-[BankAccountSeeder] bank_account ready (3 fixed rows)
+[BankAccountSeeder] bank_account ready (6 fixed rows)
 ```
 
-| mobileNumber | bankName | accountType | accountNumber | ifscCode | debitCardNumber | expiry | cvv |
-|---|---|---|---|---|---|---|---|
-| `9876543210` | ICICI Bank | SAVINGS | `10023456789012` | `ICIC0001234` | `4111111111111111` | `09/28` | `123` |
-| `9876543210` | HDFC Bank | CURRENT | `20034567890123` | `HDFC0000123` | `5500005555555559` | `03/27` | `456` |
-| `9000000001` | State Bank of India | SAVINGS | `30045678901234` | `SBIN0001234` | `4012888888881881` | `11/29` | `789` |
+| mobileNumber | holder | bankName | accountType | accountNumber | ifscCode | debitCardNumber | expiry | cvv | ATM PIN (plaintext, mock only) |
+|---|---|---|---|---|---|---|---|---|---|
+| `9876543210` | Ravi Kumar | ICICI Bank | SAVINGS | `10023456789012` | `ICIC0001234` | `4111111111111111` | `09/28` | `123` | `1234` (pre-seeded) |
+| `9876543210` | Ravi Kumar | HDFC Bank | CURRENT | `20034567890123` | `HDFC0000123` | `5500005555555559` | `03/27` | `456` | `5678` (pre-seeded) |
+| `9000000001` | Demo Customer One | State Bank of India | SAVINGS | `30045678901234` | `SBIN0001234` | `4012888888881881` | `11/29` | `789` | `4321` (pre-seeded) |
+| `9123456789` | Priya Sharma | Axis Bank | SAVINGS | `40056789012345` | `UTIB0000456` | `5425233430109903` | `06/30` | `321` | `2580` (pre-seeded) |
+| `9988776655` | Amit Patel | Kotak Mahindra Bank | CURRENT | `50067890123456` | `KKBK0000958` | `378282246310005` | `01/29` | `654` | — (call `set-atm-pin` first) |
+| `9988776655` | Amit Patel | Punjab National Bank | SAVINGS | `50067890123457` | `PUNB0123456` | `6011000990139424` | `12/28` | `111` | `9876` (pre-seeded) |
 
 (`cvv` above is only ever an *input* you send to `activate-mobile`, §7.2 below — no endpoint ever
 returns it.)
@@ -365,5 +369,12 @@ curl -X POST http://localhost:3000/api/v1/bill-payment/payment/retry \
 Mock mode is a **local/CI-only** switch — never point a real mobile app or admin portal build at
 a service with `AUTH_MOCK_MODE=true`. When writing integration code against this API, always test
 against real Keycloak (`AUTH_MOCK_MODE=false`) before shipping, since `login`/`logout` payload
-shapes match but token *values* and lifetimes differ (mock tokens live 24h/48h; real Keycloak
-tokens live 5min/30min by default).
+shapes match but token *values* differ (mock tokens are fixed `mock-<username>-token` strings, real
+ones are signed JWTs). Access-token *lifetime* happens to coincide right now — mock tokens live
+24h/48h (`mock-users.const.ts`/`KeycloakService.mockLogin`, unrelated to real Keycloak config) and
+real `admin-web`/`mobile-app` access tokens are also 24h (`access.token.lifespan` on those
+clients, capped by realm `ssoSessionMaxLifespan`) — but don't rely on that staying true; they're
+configured independently and can drift apart. Refresh-token lifetime does differ: mock refresh
+tokens live 48h, real ones only 30 minutes (`refreshExpiresIn: 1800`) — and since this service has
+no `/auth/refresh` endpoint, that mostly just means real sessions need a fresh `POST /auth/login`
+well before the 24h access-token window is up in practice.

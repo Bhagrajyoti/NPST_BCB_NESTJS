@@ -14,6 +14,7 @@ import { DelegatedRole } from '../entities/delegated-role.entity';
 import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { Role } from '../entities/role.entity';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class RolesService {
@@ -27,6 +28,7 @@ export class RolesService {
     @InjectRepository(DelegatedRole)
     private readonly delegatedRoles: Repository<DelegatedRole>,
     private readonly keycloakService: KeycloakService,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   async create(dto: CreateRoleDto, actorKeycloakUserId: string) {
@@ -55,6 +57,13 @@ export class RolesService {
     if (dto.delegatedAdminKeycloakUserIds?.length) {
       await this.replaceDelegations(role.id, dto.delegatedAdminKeycloakUserIds, actorKeycloakUserId);
     }
+
+    await this.auditOutbox.record('ROLE_CREATED', {
+      roleId: role.id,
+      name: role.name,
+      dutyType: role.dutyType,
+      actorKeycloakUserId,
+    });
 
     return this.findRoleWithPermissions(role.id);
   }
@@ -86,6 +95,8 @@ export class RolesService {
       await this.replaceDelegations(role.id, dto.delegatedAdminKeycloakUserIds, actorKeycloakUserId);
     }
 
+    await this.auditOutbox.record('ROLE_UPDATED', { roleId: role.id, name: role.name, actorKeycloakUserId });
+
     return this.findRoleWithPermissions(role.id);
   }
 
@@ -112,6 +123,12 @@ export class RolesService {
       }),
     );
     await this.rolePermissions.save(mappings);
+
+    await this.auditOutbox.record('ROLE_PERMISSIONS_MAPPED', {
+      roleId: role.id,
+      permissionIds: dto.permissionIds,
+      actorKeycloakUserId,
+    });
 
     return this.findRoleWithPermissions(role.id);
   }

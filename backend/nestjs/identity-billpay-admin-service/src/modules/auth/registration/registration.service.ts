@@ -14,6 +14,7 @@ import { OtpService } from '../otp/otp.service';
 import { KeycloakService } from '../keycloak/keycloak.service';
 import { DeviceService } from '../device/device.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class RegistrationService {
@@ -25,6 +26,7 @@ export class RegistrationService {
     private readonly keycloakService: KeycloakService,
     private readonly deviceService: DeviceService,
     private readonly bankAccountService: BankAccountService,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   findAll() {
@@ -51,6 +53,11 @@ export class RegistrationService {
     });
     const attempt = await this.repository.save(entity);
     const registeredAccounts = await this.bankAccountService.findByMobileNumber(dto.mobileNumber);
+    await this.auditOutbox.record('REGISTRATION_STARTED', {
+      attemptId: attempt.id,
+      mobileNumber: dto.mobileNumber,
+      accountsFound: registeredAccounts.length,
+    });
 
     return { ...attempt, registeredAccounts };
   }
@@ -61,12 +68,21 @@ export class RegistrationService {
    */
   async setAtmPin(dto: SetAtmPinDto) {
     await this.bankAccountService.setAtmPin(dto);
+    await this.auditOutbox.record('REGISTRATION_ATM_PIN_SET', {
+      mobileNumber: dto.mobileNumber,
+      accountNumber: dto.accountNumber,
+    });
     return { success: true, message: 'ATM PIN set successfully' };
   }
 
   /** Verifies the ATM PIN previously set via setAtmPin() — completed before activateMobile(). */
   async verifyAtmPin(dto: VerifyAtmPinDto) {
     const verified = await this.bankAccountService.verifyAtmPin(dto);
+    await this.auditOutbox.record('REGISTRATION_ATM_PIN_VERIFIED', {
+      mobileNumber: dto.mobileNumber,
+      accountNumber: dto.accountNumber,
+      verified,
+    });
     return { verified };
   }
 
@@ -79,6 +95,10 @@ export class RegistrationService {
    */
   async activateMobile(dto: ActivateMobileDto) {
     const account = await this.bankAccountService.verifyDebitCard(dto);
+    await this.auditOutbox.record('REGISTRATION_MOBILE_ACTIVATED', {
+      mobileNumber: dto.mobileNumber,
+      accountNumber: dto.accountNumber,
+    });
     return {
       success: true,
       message: 'Successfully connected',
@@ -101,7 +121,9 @@ export class RegistrationService {
 
     await this.otpService.verify({ challengeId: dto.challengeId, otp: dto.otp });
 
-    return this.orchestrator.advance(dto.attemptId, RegistrationStep.OTP_VERIFIED);
+    const result = await this.orchestrator.advance(dto.attemptId, RegistrationStep.OTP_VERIFIED);
+    await this.auditOutbox.record('REGISTRATION_OTP_VERIFIED', { attemptId: dto.attemptId });
+    return result;
   }
 
   /**
@@ -142,7 +164,12 @@ export class RegistrationService {
       updated.keycloakUserId = keycloakUser.id;
       await this.repository.save(updated);
 
-      return this.orchestrator.advance(dto.attemptId, RegistrationStep.KEYCLOAK_USER_CREATED);
+      const result = await this.orchestrator.advance(dto.attemptId, RegistrationStep.KEYCLOAK_USER_CREATED);
+      await this.auditOutbox.record('REGISTRATION_CREDENTIALS_SET', {
+        attemptId: dto.attemptId,
+        keycloakUserId: keycloakUser.id,
+      });
+      return result;
     } catch (error) {
       await this.orchestrator.fail(
         dto.attemptId,
@@ -173,7 +200,12 @@ export class RegistrationService {
       updated.deviceProfileId = device.id;
       await this.repository.save(updated);
 
-      return this.orchestrator.advance(dto.attemptId, RegistrationStep.DEVICE_REGISTERED);
+      const result = await this.orchestrator.advance(dto.attemptId, RegistrationStep.DEVICE_REGISTERED);
+      await this.auditOutbox.record('REGISTRATION_DEVICE_REGISTERED', {
+        attemptId: dto.attemptId,
+        deviceId: dto.deviceId,
+      });
+      return result;
     } catch (error) {
       await this.orchestrator.fail(
         dto.attemptId,
@@ -190,6 +222,10 @@ export class RegistrationService {
     this.requireStep(attempt, RegistrationStep.DEVICE_REGISTERED);
 
     await this.orchestrator.advance(attemptId, RegistrationStep.COMPLETED);
+    await this.auditOutbox.record('REGISTRATION_COMPLETED', {
+      attemptId,
+      keycloakUserId: attempt.keycloakUserId,
+    });
 
     return {
       attemptId,

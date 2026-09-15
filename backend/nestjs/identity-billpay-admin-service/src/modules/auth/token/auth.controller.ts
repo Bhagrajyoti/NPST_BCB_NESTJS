@@ -8,6 +8,8 @@ import { AuthenticatedUser, Public } from 'nest-keycloak-connect';
 import { Auth } from '../../../common/decorators/auth.decorator';
 // Service (../keycloak/keycloak.service.ts) that talks to the actual Keycloak server over HTTP for login/logout/token operations.
 import { KeycloakService } from '../keycloak/keycloak.service';
+// Records an audit-trail row for login/signup/logout — see src/clients/audit-outbox.
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 // DTO (./dto/login.dto.ts) validating/shaping the login request body (username, password, optional clientId).
 import { LoginDto } from './dto/login.dto';
 // DTO (./dto/logout.dto.ts) validating/shaping the logout request body (refreshToken, optional clientId).
@@ -29,7 +31,10 @@ import { TokenResponseDto } from './dto/token-response.dto';
 @Controller('auth')
 export class AuthController {
   // Injects KeycloakService via Nest's DI container so route handlers can delegate to it.
-  constructor(private readonly keycloakService: KeycloakService) {}
+  constructor(
+    private readonly keycloakService: KeycloakService,
+    private readonly auditOutbox: AuditOutboxService,
+  ) {}
 
   // Exempts this route from the global Keycloak AuthGuard — no bearer token is required to hit /auth/login (it's how a token is obtained in the first place).
   @Public()
@@ -47,9 +52,14 @@ export class AuthController {
   // Swagger doc: describes the 401 error response for bad credentials or Keycloak errors.
   @ApiResponse({ status: 401, description: 'Invalid credentials or Keycloak error' })
   // Handler: takes the validated LoginDto from the request body...
-  login(@Body() dto: LoginDto) {
+  async login(@Body() dto: LoginDto) {
     // ...and forwards it to KeycloakService.login, which calls Keycloak's /protocol/openid-connect/token endpoint (grant_type=password) and returns access/refresh tokens.
-    return this.keycloakService.login(dto);
+    const result = await this.keycloakService.login(dto);
+    await this.auditOutbox.record('AUTH_LOGIN', {
+      username: dto.username,
+      clientId: dto.clientId ?? 'admin-web',
+    });
+    return result;
   }
 
   // Exempts this route too — signup is how an account exists in the first place.
@@ -66,9 +76,14 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'Account created' })
   @ApiResponse({ status: 409, description: 'Username already exists' })
   // Handler: takes the validated SignupDto from the request body...
-  signup(@Body() dto: SignupDto) {
+  async signup(@Body() dto: SignupDto) {
     // ...and forwards it to KeycloakService.signup, which creates the Keycloak user and assigns RETAIL_CUSTOMER.
-    return this.keycloakService.signup(dto);
+    const result = await this.keycloakService.signup(dto);
+    await this.auditOutbox.record('AUTH_SIGNUP', {
+      username: dto.username,
+      keycloakUserId: result.keycloakUserId,
+    });
+    return result;
   }
 
   // Maps this handler to POST /auth/logout.
@@ -87,9 +102,11 @@ export class AuthController {
   // Swagger doc: 401 response when the refresh token is invalid or expired.
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   // Handler: takes the validated LogoutDto (refreshToken + optional clientId) from the body...
-  logout(@Body() dto: LogoutDto) {
+  async logout(@Body() dto: LogoutDto, @AuthenticatedUser() user: Record<string, unknown>) {
     // ...and forwards it to KeycloakService.logout, which calls Keycloak's /protocol/openid-connect/logout endpoint to revoke the refresh token.
-    return this.keycloakService.logout(dto);
+    const result = await this.keycloakService.logout(dto);
+    await this.auditOutbox.record('AUTH_LOGOUT', { keycloakUserId: user?.sub ?? null });
+    return result;
   }
 
   // Maps this handler to POST /auth/me.

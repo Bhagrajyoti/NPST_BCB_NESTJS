@@ -14,7 +14,8 @@ describe('CredentialService', () => {
       softDelete: jest.fn().mockResolvedValue(undefined),
     };
     keycloakService = { resetUserPassword: jest.fn().mockResolvedValue(undefined) };
-    service = new CredentialService(repository as any, keycloakService as any);
+    const auditOutbox = { record: jest.fn().mockResolvedValue(undefined) };
+    service = new CredentialService(repository as any, keycloakService as any, auditOutbox as any);
   });
 
   describe('create', () => {

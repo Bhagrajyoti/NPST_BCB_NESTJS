@@ -5,7 +5,8 @@ API & Technical Documentation
 Related guides: [api endpoint guide.md](api%20endpoint%20guide.md) (`/auth/*`),
 [adminservice.md](adminservice.md) (`/admin/*`), [rbacservice.md](rbacservice.md) (`/employees`,
 `/roles`, ...), [mock-testing-guide.md](mock-testing-guide.md) (local/offline testing without a
-real Keycloak server).
+real Keycloak server), [debugging-guide.md](debugging-guide.md) (full API catalog + how to debug
+any endpoint).
 
 ## 1. Overview
 
