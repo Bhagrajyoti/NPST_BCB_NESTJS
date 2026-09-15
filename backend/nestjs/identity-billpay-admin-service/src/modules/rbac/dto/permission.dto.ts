@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreatePermissionDto {
   @ApiProperty({ example: 'EMPLOYEE_CREATE' })
@@ -30,4 +30,12 @@ export class CreatePermissionDto {
   @IsString()
   @MaxLength(80)
   action: string;
+
+  @ApiPropertyOptional({
+    description: 'Flags this permission as needing a secondary confirmation step in the UI',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  highRisk?: boolean;
 }

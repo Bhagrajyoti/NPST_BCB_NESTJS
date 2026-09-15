@@ -13,6 +13,8 @@ import { BillController } from './bill/controller/bill.controller';
 import { BillService } from './bill/service/bill.service';
 import { BbpsAdapter } from './payment/adapter/bbps.adapter';
 import { MockBbpsAdapter } from './payment/adapter/mock-bbps.adapter';
+import { DemoBbpsData } from './demo/entities/demo-bbps-data.entity';
+import { DemoBbpsDataSeeder } from './demo/demo-bbps-data.seeder';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -20,6 +22,7 @@ import { MockBbpsAdapter } from './payment/adapter/mock-bbps.adapter';
       BillPayment,
       BillSchedule,
       MockBill,
+      DemoBbpsData,
     ]),
   ],
   controllers: [
@@ -32,6 +35,7 @@ import { MockBbpsAdapter } from './payment/adapter/mock-bbps.adapter';
   PaymentService,
   BillScheduleService,
   BillService,
+  DemoBbpsDataSeeder,
  MockBbpsAdapter,
   {
     provide: 'BBPS_ADAPTER',

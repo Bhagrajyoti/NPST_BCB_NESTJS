@@ -6,6 +6,7 @@ import { CreateAuthorizationRuleDto } from './dto/create-authorization-rule.dto'
 import { UpdateAuthorizationRuleDto } from './dto/update-authorization-rule.dto';
 import { AuthorizationRuleHistory } from './entities/authorization-rule-history.entity';
 import { AuthorizationRule } from './entities/authorization-rule.entity';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 const VIEW_ROLES = ['BANK_SUPER_ADMIN', 'BANK_ADMIN'];
 
@@ -16,6 +17,7 @@ export class AuthorizationRulesService {
     private readonly rules: Repository<AuthorizationRule>,
     @InjectRepository(AuthorizationRuleHistory)
     private readonly history: Repository<AuthorizationRuleHistory>,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   findAll(actor: Record<string, unknown>) {
@@ -61,6 +63,13 @@ export class AuthorizationRulesService {
       }),
     );
 
+    await this.auditOutbox.record('AUTHORIZATION_RULE_CREATED', {
+      ruleId: rule.id,
+      cif: rule.cif,
+      threshold: rule.threshold,
+      createdByKeycloakUserId: actorKeycloakUserId,
+    });
+
     return rule;
   }
 
@@ -94,6 +103,13 @@ export class AuthorizationRulesService {
       }),
     );
 
+    await this.auditOutbox.record('AUTHORIZATION_RULE_UPDATED', {
+      ruleId: rule.id,
+      version: rule.version,
+      changeReason: dto.changeReason ?? null,
+      updatedByKeycloakUserId: actorKeycloakUserId,
+    });
+
     return rule;
   }
 
@@ -116,6 +132,10 @@ export class AuthorizationRulesService {
     );
 
     await this.rules.softDelete(id);
+    await this.auditOutbox.record('AUTHORIZATION_RULE_DEACTIVATED', {
+      ruleId: id,
+      deactivatedByKeycloakUserId: actorKeycloakUserId,
+    });
     return { id, deactivated: true };
   }
 

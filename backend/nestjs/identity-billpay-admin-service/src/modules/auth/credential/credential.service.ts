@@ -5,7 +5,8 @@ import { KeycloakService } from '../keycloak/keycloak.service';
 import { GetCredentialDto } from './dto/get-credential.dto';
 import { SetCredentialDto } from './dto/set-credential.dto';
 import { Credential } from './entities/credential.entity';
-import { hashMpin } from './utils/mpin-hash.util';
+import { hashMpin, verifyMpin } from './utils/mpin-hash.util';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class CredentialService {
@@ -13,6 +14,7 @@ export class CredentialService {
     @InjectRepository(Credential)
     private readonly repository: Repository<Credential>,
     private readonly keycloakService: KeycloakService,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   findAll() {
@@ -70,11 +72,30 @@ export class CredentialService {
       }
     }
 
+    await this.auditOutbox.record('CREDENTIAL_UPDATED', {
+      keycloakUserId: dto.userId,
+      passwordUpdated,
+      mpinUpdated: !!mpinRecord,
+    });
+
     return {
       keycloakUserId: dto.userId,
       passwordUpdated,
       mpin: mpinRecord ? this.toPublicView(mpinRecord) : null,
     };
+  }
+
+  /**
+   * Compares a plaintext MPIN against the stored scrypt hash for a customer — the
+   * counterpart to `create()`'s hashing, for use by an MPIN-based login/step-up-auth flow.
+   * Never logs or returns the plaintext or hash.
+   */
+  async verifyMpin(keycloakUserId: string, mpin: string): Promise<boolean> {
+    const record = await this.repository.findOne({ where: { keycloakUserId } });
+    if (!record) {
+      return false;
+    }
+    return verifyMpin(mpin, record.hashedMpin);
   }
 
   async softDeleteByKeycloakUserId(keycloakUserId: string) {
@@ -83,6 +104,7 @@ export class CredentialService {
       throw new NotFoundException(`No MPIN credential found for Keycloak user ${keycloakUserId}`);
     }
     await this.repository.softDelete(record.id);
+    await this.auditOutbox.record('CREDENTIAL_MPIN_DELETED', { keycloakUserId });
     return { keycloakUserId, deleted: true };
   }
 

@@ -17,6 +17,7 @@ import { CreateEmployeeDto, UpdateEmployeeRoleDto } from '../dto/employee.dto';
 import { EmployeeUserRole } from '../entities/employee-user-role.entity';
 import { Employee } from '../entities/employee.entity';
 import { RolesService } from './roles.service';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class EmployeesService {
@@ -28,6 +29,7 @@ export class EmployeesService {
     private readonly rolesService: RolesService,
     private readonly keycloakService: KeycloakService,
     private readonly eventBus: InternalEventBusService,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
 
   async create(
@@ -93,6 +95,15 @@ export class EmployeesService {
         employee.isActive,
       ),
     );
+
+    await this.auditOutbox.record('EMPLOYEE_CREATED', {
+      employeeId: employee.id,
+      keycloakUserId: employee.keycloakUserId,
+      username: employee.username,
+      roleId: role.id,
+      roleName: role.name,
+      createdByKeycloakUserId: actorKeycloakUserId,
+    });
 
     return {
       employee: {
@@ -182,7 +193,16 @@ export class EmployeesService {
         employee.isActive,
       ),
     );
-    
+
+    await this.auditOutbox.record('EMPLOYEE_ROLE_UPDATED', {
+      employeeId: employee.id,
+      keycloakUserId: employee.keycloakUserId,
+      previousRoleId: currentAssignment?.roleId ?? null,
+      newRoleId: newRole.id,
+      newRoleName: newRole.name,
+      updatedByKeycloakUserId: actorKeycloakUserId,
+    });
+
     return {
       employee: {
         id: employee.id,

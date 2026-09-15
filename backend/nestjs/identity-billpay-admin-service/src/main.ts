@@ -1,17 +1,41 @@
+// Must run before AppModule is imported below: app.module.ts reads process.env.AUTH_MOCK_MODE
+// at module-decoration time (synchronously, on import) to pick its guards, which is earlier
+// than @nestjs/config's ConfigModule.forRoot() would otherwise load the .env file.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { normalizeBearerMiddleware } from './common/middleware/normalize-bearer.middleware';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
+import {
+  buildPublicPath,
+  resolveApiGlobalPrefix,
+  resolveGatewayPathPrefix,
+} from './config/api-path.config';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
 
-  app.setGlobalPrefix('api/v1');
+  const globalPrefix = resolveApiGlobalPrefix();
+  const gatewayPrefix = resolveGatewayPathPrefix();
+  const configuredPrefix = (process.env.API_GLOBAL_PREFIX ?? 'api/v1').replace(/^\/+|\/+$/g, '');
+
+  if (configuredPrefix.startsWith('identity/')) {
+    logger.warn(
+      'API_GLOBAL_PREFIX must not include "identity/" — the gateway adds that externally. ' +
+        `Using "${globalPrefix}" instead of "${configuredPrefix}".`,
+    );
+  }
+
+  app.setGlobalPrefix(globalPrefix);
+
+  // Required when running behind a reverse proxy / API gateway (correct client IP, etc.)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   const enableHttpsHeaders = process.env.ENABLE_HTTPS_HEADERS === 'true';
   if (enableHttpsHeaders) {
@@ -32,34 +56,57 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseTransformInterceptor());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('NPST BCB — Auth Service')
-    .setDescription(
-      'Bharat Banking authentication APIs. All endpoints use POST.\n\n' +
-        '**Audiences:**\n' +
-        '- `[Mobile / Customer]` — mobile app endpoints for retail/corporate customers (use Keycloak client `mobile-app`)\n' +
-        '- `[Admin]` — admin web portal for bank staff (use Keycloak client `admin-web`)\n\n' +
-        '**Auth flow:**\n' +
-        '1. `POST /auth/login` — copy **`accessToken`** (not `refreshToken`)\n' +
-        '2. Click **Authorize** and paste the token only (no `Bearer` prefix)\n' +
-        '3. Call protected endpoints within 5 minutes\n' +
-        '4. `POST /auth/logout` when done',
-    )
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
+  const swaggerBuilder = new DocumentBuilder().setTitle('NPST BCB — Auth Service');
+  const publicBaseUrl = process.env.APP_PUBLIC_BASE_URL?.replace(/\/+$/, '');
+  if (publicBaseUrl) {
+    swaggerBuilder.addServer(publicBaseUrl);
+  } else if (gatewayPrefix) {
+    swaggerBuilder.addServer(`/${gatewayPrefix}`);
+  }
+
+  const swaggerMountPath = `${globalPrefix}/docs`;
+  const swaggerJsonPath = `${globalPrefix}/docs-json`;
+  const publicSwaggerJsonPath = buildPublicPath(gatewayPrefix, swaggerJsonPath);
+
+  const swaggerDocument = SwaggerModule.createDocument(
+    app,
+    swaggerBuilder
+      .setDescription(
+        'Bharat Banking authentication APIs. All endpoints use POST.\n\n' +
+          '**Audiences:**\n' +
+          '- `[Mobile / Customer]` — mobile app endpoints for retail/corporate customers (use Keycloak client `mobile-app`)\n' +
+          '- `[Admin]` — admin web portal for bank staff (use Keycloak client `admin-web`)\n\n' +
+          '**Auth flow:**\n' +
+          '1. `POST /auth/login` — copy **`accessToken`** (not `refreshToken`)\n' +
+          '2. Click **Authorize** and paste the token only (no `Bearer` prefix)\n' +
+          '3. Call protected endpoints within 5 minutes\n' +
+          '4. `POST /auth/logout` when done',
+      )
+      .setVersion('1.0')
+      .addBearerAuth({
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
         description:
           'Paste **accessToken** from POST /auth/login only. Do not paste refreshToken or the word Bearer.',
-      },
-    )
-    .build();
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/v1/docs', app, swaggerDocument, {
-    swaggerOptions: { persistAuthorization: true },
+      })
+      .build(),
+  );
+  SwaggerModule.setup(swaggerMountPath, app, swaggerDocument, {
+    jsonDocumentUrl: swaggerJsonPath,
+    swaggerOptions: {
+      persistAuthorization: true,
+      ...(gatewayPrefix ? { swaggerUrl: publicSwaggerJsonPath } : {}),
+    },
   });
+
+  logger.log(`API prefix (internal): /${globalPrefix}`);
+  if (gatewayPrefix) {
+    logger.log(`Gateway prefix (external): /${gatewayPrefix}`);
+    logger.log(`Swagger UI (external): ${buildPublicPath(gatewayPrefix, swaggerMountPath)}`);
+  } else {
+    logger.log(`Swagger UI: /${swaggerMountPath}`);
+  }
 
   const port = process.env.PORT ?? 3000;
   const host = process.env.HOST ?? '0.0.0.0';

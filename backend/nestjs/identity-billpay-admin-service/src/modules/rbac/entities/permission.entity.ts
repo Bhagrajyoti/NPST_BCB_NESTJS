@@ -23,6 +23,12 @@ export class Permission extends SoftDeleteEntity {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  // Flags permissions the design doc (section 13) marks as needing a secondary confirmation
+  // step in the UI (e.g. RULE_ACTIVATE, USER_DISABLE) — not an extra access restriction beyond
+  // the role matrix, just a "are you sure?" hint. See permission-catalogue.ts.
+  @Column({ name: 'high_risk', default: false })
+  highRisk: boolean;
+
   @OneToMany(() => RolePermission, (mapping) => mapping.permission)
   roleMappings: RolePermission[];
 }

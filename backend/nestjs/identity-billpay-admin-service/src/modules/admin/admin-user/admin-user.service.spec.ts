@@ -3,13 +3,8 @@ import { AdminUserService } from './admin-user.service';
 
 describe('AdminUserService', () => {
   let service: AdminUserService;
-  let queryBuilder: {
-    orderBy: jest.Mock;
-    andWhere: jest.Mock;
-    getMany: jest.Mock;
-  };
   let repository: {
-    createQueryBuilder: jest.Mock;
+    find: jest.Mock;
     findOne: jest.Mock;
   };
 
@@ -18,46 +13,26 @@ describe('AdminUserService', () => {
   const bankMaker = { sub: 'actor-maker', realm_access: { roles: ['BANK_MAKER'] } };
 
   beforeEach(() => {
-    queryBuilder = {
-      orderBy: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([{ id: 'admin-user-1' }]),
-    };
     repository = {
-      createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
+      find: jest.fn().mockResolvedValue([{ id: 'admin-user-1' }]),
       findOne: jest.fn(),
     };
     service = new AdminUserService(repository as any);
   });
 
   describe('findAll', () => {
-    it('rejects an actor without BANK_SUPER_ADMIN or BANK_ADMIN', () => {
-      expect(() => service.findAll({}, bankMaker)).toThrow(ForbiddenException);
+    it('rejects an actor without BANK_SUPER_ADMIN', () => {
+      expect(() => service.findAll(bankMaker)).toThrow(ForbiddenException);
     });
 
-    it('allows BANK_ADMIN and returns the query results', async () => {
-      const result = await service.findAll({}, bankAdmin);
+    it('rejects BANK_ADMIN — listing is super-admin only', () => {
+      expect(() => service.findAll(bankAdmin)).toThrow(ForbiddenException);
+    });
+
+    it('allows BANK_SUPER_ADMIN and returns every row, ordered by createdAt DESC', async () => {
+      const result = await service.findAll(superAdmin);
+      expect(repository.find).toHaveBeenCalledWith({ order: { createdAt: 'DESC' } });
       expect(result).toEqual([{ id: 'admin-user-1' }]);
-    });
-
-    it('filters by role when provided', async () => {
-      await service.findAll({ role: 'BANK_MAKER' }, superAdmin);
-      expect(queryBuilder.andWhere).toHaveBeenCalledWith('admin_user.roleName = :role', {
-        role: 'BANK_MAKER',
-      });
-    });
-
-    it('filters by search term across username and email', async () => {
-      await service.findAll({ search: 'ravi' }, superAdmin);
-      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
-        '(admin_user.username LIKE :search OR admin_user.email LIKE :search)',
-        { search: '%ravi%' },
-      );
-    });
-
-    it('applies no filters when none are given', async () => {
-      await service.findAll({}, superAdmin);
-      expect(queryBuilder.andWhere).not.toHaveBeenCalled();
     });
   });
 

@@ -1,0 +1,156 @@
+/**
+ * Default Role -> Permission Matrix (seed data, backend copy)
+ * ------------------------------------------------
+ * Mirrors the frontend's `role-matrix.default.ts` (RBAC design doc section 6), with the four
+ * `SystemRoleKey`s mapped onto this service's real Keycloak realm role names (see
+ * `src/modules/rbac/constants/rbac.constants.ts` and .env's role list) so the same matrix can
+ * be applied to actual `rbac_role` rows: `super_admin` -> `BANK_SUPER_ADMIN`,
+ * `admin` -> `BANK_ADMIN`, `maker` -> `BANK_MAKER`, `checker` -> `BANK_CHECKER`.
+ *
+ * IMPORTANT: this is SEED data for the four initial roles only (doc section 1 & decision 4).
+ * It is not hardcoded authorization logic -- BANK_SUPER_ADMIN can change any of these mappings
+ * at runtime via POST /roles/map-permissions, and can create additional custom roles with any
+ * combination of permissions (doc decisions 3, 5, 6). See scripts/seed-default-role-permissions.ts
+ * for how this gets applied — deliberately NOT run automatically on app boot (unlike the
+ * permission catalogue seeder), so it never silently overwrites a super-admin's own role/
+ * permission customization, and never touches the live Keycloak server (it only reads/writes
+ * the *local* `rbac_role`/`rbac_role_permission` tables for roles that already exist locally).
+ */
+import { ALL_PERMISSION_CODES } from './permission-catalogue';
+
+export const SYSTEM_ROLE_KEYCLOAK_NAMES = {
+  super_admin: 'BANK_SUPER_ADMIN',
+  admin: 'BANK_ADMIN',
+  maker: 'BANK_MAKER',
+  checker: 'BANK_CHECKER',
+} as const;
+
+export type SystemRoleKey = keyof typeof SYSTEM_ROLE_KEYCLOAK_NAMES;
+
+export interface SystemRoleDef {
+  key: SystemRoleKey;
+  /** Keycloak realm role name == this service's `rbac_role.name` / `keycloak_role_name`. */
+  keycloakRoleName: string;
+  displayName: string;
+  /** Protected roles cannot be deleted or weakened (design doc section 3 & decision 9). */
+  isProtected: boolean;
+  description: string;
+}
+
+export const SYSTEM_ROLES: SystemRoleDef[] = [
+  {
+    key: 'super_admin',
+    keycloakRoleName: 'BANK_SUPER_ADMIN',
+    displayName: 'Super-admin',
+    isProtected: true,
+    description: 'Highest-level protected system authority. Can configure roles and permissions for every other role.',
+  },
+  {
+    key: 'admin',
+    keycloakRoleName: 'BANK_ADMIN',
+    displayName: 'Admin',
+    isProtected: false,
+    description: 'Operational administrator. Broad access across modules; cannot manage roles/permissions.',
+  },
+  {
+    key: 'maker',
+    keycloakRoleName: 'BANK_MAKER',
+    displayName: 'Maker',
+    isProtected: false,
+    description: 'Creates and submits requests for checking. Cannot approve or reject.',
+  },
+  {
+    key: 'checker',
+    keycloakRoleName: 'BANK_CHECKER',
+    displayName: 'Checker',
+    isProtected: false,
+    description: 'Reviews and approves/rejects requests created by a Maker. Cannot create or edit.',
+  },
+];
+
+/** Keyed by Keycloak realm role name (matches `rbac_role.keycloak_role_name`). */
+export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  BANK_MAKER: [
+    'ACCOUNT_CREATE', 'ACCOUNT_EDIT', 'ACCOUNT_SEARCH', 'ACCOUNT_VIEW',
+    'BENEFICIARY_COOLING_PERIOD_VIEW', 'BENEFICIARY_REQUEST_CREATE', 'BENEFICIARY_REQUEST_EDIT', 'BENEFICIARY_REQUEST_SUBMIT',
+    'BENEFICIARY_REQUEST_VIEW', 'BENEFICIARY_SEARCH', 'BENEFICIARY_VIEW', 'CARD_REQUEST_CREATE',
+    'CARD_REQUEST_EDIT', 'CARD_REQUEST_SUBMIT', 'CARD_REQUEST_VIEW', 'CARD_SEARCH',
+    'CARD_VIEW', 'CHANNEL_LIMIT_EDIT', 'CHANNEL_LIMIT_VIEW', 'COMPLIANCE_CASE_CREATE',
+    'COMPLIANCE_CASE_UPDATE', 'COMPLIANCE_CASE_VIEW', 'CUSTOMER_CREATE', 'CUSTOMER_EDIT',
+    'CUSTOMER_LIMIT_EDIT', 'CUSTOMER_LIMIT_VIEW', 'CUSTOMER_REQUEST_VIEW', 'CUSTOMER_SEARCH',
+    'CUSTOMER_VIEW', 'DEPOSIT_PRODUCT_CREATE', 'DEPOSIT_PRODUCT_EDIT', 'DEPOSIT_PRODUCT_VIEW',
+    'DEPOSIT_REQUEST_CREATE', 'DEPOSIT_REQUEST_EDIT', 'DEPOSIT_REQUEST_SUBMIT', 'DEPOSIT_REQUEST_VIEW',
+    'DEPOSIT_SEARCH', 'DEPOSIT_VIEW', 'DIGITAL_REQUEST_CREATE', 'DIGITAL_REQUEST_EDIT',
+    'DIGITAL_REQUEST_VIEW', 'DIGITAL_USER_CREATE', 'DIGITAL_USER_EDIT', 'DIGITAL_USER_SEARCH',
+    'DIGITAL_USER_VIEW', 'DISPUTE_CREATE', 'DISPUTE_UPDATE', 'DISPUTE_VIEW',
+    'KYC_EDIT', 'KYC_REQUEST_CREATE', 'KYC_REQUEST_UPDATE', 'KYC_REQUEST_VIEW',
+    'KYC_SEARCH', 'KYC_VIEW', 'LOAN_CLOSURE_VIEW', 'LOAN_REPAYMENT_VIEW',
+    'LOAN_REQUEST_CANCEL', 'LOAN_REQUEST_CREATE', 'LOAN_REQUEST_EDIT', 'LOAN_REQUEST_SUBMIT',
+    'LOAN_REQUEST_VIEW', 'LOAN_SEARCH', 'LOAN_VIEW', 'MAINTENANCE_CREATE',
+    'MAINTENANCE_EDIT', 'MAINTENANCE_VIEW', 'REFUND_CREATE', 'REFUND_EDIT',
+    'REFUND_SUBMIT', 'REFUND_VIEW', 'REPORT_VIEW', 'RULE_CREATE',
+    'RULE_EDIT', 'RULE_VIEW', 'SERVICE_AVAILABILITY_EDIT', 'SERVICE_AVAILABILITY_VIEW',
+    'SERVICE_REQUEST_CANCEL', 'SERVICE_REQUEST_CREATE', 'SERVICE_REQUEST_EDIT', 'SERVICE_REQUEST_SUBMIT',
+    'SERVICE_REQUEST_VIEW', 'TRANSACTION_LIMIT_CREATE', 'TRANSACTION_LIMIT_EDIT', 'TRANSACTION_LIMIT_VIEW',
+    'TRANSACTION_SEARCH', 'TRANSACTION_VIEW',
+  ],
+  BANK_CHECKER: [
+    'ACCOUNT_SEARCH', 'ACCOUNT_VIEW', 'BENEFICIARY_COOLING_PERIOD_VIEW', 'BENEFICIARY_REQUEST_APPROVE',
+    'BENEFICIARY_REQUEST_REJECT', 'BENEFICIARY_REQUEST_VIEW', 'BENEFICIARY_SEARCH', 'BENEFICIARY_VIEW',
+    'CARD_REQUEST_APPROVE', 'CARD_REQUEST_REJECT', 'CARD_REQUEST_VIEW', 'CARD_SEARCH',
+    'CARD_VIEW', 'CHANNEL_LIMIT_VIEW', 'COMPLIANCE_CASE_VIEW', 'CUSTOMER_LIMIT_VIEW',
+    'CUSTOMER_REQUEST_VIEW', 'CUSTOMER_SEARCH', 'CUSTOMER_VIEW', 'DEPOSIT_PRODUCT_VIEW',
+    'DEPOSIT_REQUEST_APPROVE', 'DEPOSIT_REQUEST_REJECT', 'DEPOSIT_REQUEST_VIEW', 'DEPOSIT_SEARCH',
+    'DEPOSIT_VIEW', 'DIGITAL_REQUEST_APPROVE', 'DIGITAL_REQUEST_REJECT', 'DIGITAL_REQUEST_VIEW',
+    'DIGITAL_USER_SEARCH', 'DIGITAL_USER_VIEW', 'DISPUTE_VIEW', 'KYC_REQUEST_APPROVE',
+    'KYC_REQUEST_REJECT', 'KYC_REQUEST_VIEW', 'KYC_SEARCH', 'KYC_VIEW',
+    'LOAN_CLOSURE_VIEW', 'LOAN_REPAYMENT_VIEW', 'LOAN_REQUEST_APPROVE', 'LOAN_REQUEST_REJECT',
+    'LOAN_REQUEST_VIEW', 'LOAN_SEARCH', 'LOAN_VIEW', 'MAINTENANCE_VIEW',
+    'REFUND_APPROVE', 'REFUND_REJECT', 'REFUND_VIEW', 'REPORT_VIEW',
+    'RULE_VIEW', 'SERVICE_AVAILABILITY_VIEW', 'SERVICE_REQUEST_APPROVE', 'SERVICE_REQUEST_REJECT',
+    'SERVICE_REQUEST_VIEW', 'TRANSACTION_LIMIT_APPROVE', 'TRANSACTION_LIMIT_VIEW', 'TRANSACTION_SEARCH',
+    'TRANSACTION_VIEW',
+  ],
+  BANK_ADMIN: [
+    'ACCOUNT_CLOSE', 'ACCOUNT_CREATE', 'ACCOUNT_EDIT', 'ACCOUNT_EXPORT',
+    'ACCOUNT_SEARCH', 'ACCOUNT_VIEW', 'AUDIT_LOG_EXPORT', 'AUDIT_LOG_SEARCH',
+    'AUDIT_LOG_VIEW', 'BENEFICIARY_COOLING_PERIOD_OVERRIDE', 'BENEFICIARY_COOLING_PERIOD_VIEW', 'BENEFICIARY_REQUEST_APPROVE',
+    'BENEFICIARY_REQUEST_CREATE', 'BENEFICIARY_REQUEST_EDIT', 'BENEFICIARY_REQUEST_REJECT', 'BENEFICIARY_REQUEST_SUBMIT',
+    'BENEFICIARY_REQUEST_VIEW', 'BENEFICIARY_SEARCH', 'BENEFICIARY_VIEW', 'CARD_BLOCK',
+    'CARD_REQUEST_APPROVE', 'CARD_REQUEST_CREATE', 'CARD_REQUEST_EDIT', 'CARD_REQUEST_REJECT',
+    'CARD_REQUEST_SUBMIT', 'CARD_REQUEST_VIEW', 'CARD_SEARCH', 'CARD_UNBLOCK',
+    'CARD_VIEW', 'CHANNEL_LIMIT_EDIT', 'CHANNEL_LIMIT_VIEW', 'COMPLIANCE_CASE_ASSIGN',
+    'COMPLIANCE_CASE_CLOSE', 'COMPLIANCE_CASE_CREATE', 'COMPLIANCE_CASE_ESCALATE', 'COMPLIANCE_CASE_UPDATE',
+    'COMPLIANCE_CASE_VIEW', 'CUSTOMER_CREATE', 'CUSTOMER_EDIT', 'CUSTOMER_EXPORT',
+    'CUSTOMER_LIMIT_EDIT', 'CUSTOMER_LIMIT_VIEW', 'CUSTOMER_REQUEST_VIEW', 'CUSTOMER_SEARCH',
+    'CUSTOMER_VIEW', 'DEPOSIT_MATURITY', 'DEPOSIT_PREMATURE_CLOSURE', 'DEPOSIT_PRODUCT_CREATE',
+    'DEPOSIT_PRODUCT_EDIT', 'DEPOSIT_PRODUCT_VIEW', 'DEPOSIT_RENEWAL', 'DEPOSIT_REQUEST_APPROVE',
+    'DEPOSIT_REQUEST_CREATE', 'DEPOSIT_REQUEST_EDIT', 'DEPOSIT_REQUEST_REJECT', 'DEPOSIT_REQUEST_SUBMIT',
+    'DEPOSIT_REQUEST_VIEW', 'DEPOSIT_SEARCH', 'DEPOSIT_VIEW', 'DIGITAL_REQUEST_APPROVE',
+    'DIGITAL_REQUEST_CREATE', 'DIGITAL_REQUEST_EDIT', 'DIGITAL_REQUEST_REJECT', 'DIGITAL_REQUEST_VIEW',
+    'DIGITAL_USER_CREATE', 'DIGITAL_USER_EDIT', 'DIGITAL_USER_SEARCH', 'DIGITAL_USER_VIEW',
+    'DISPUTE_CREATE', 'DISPUTE_UPDATE', 'DISPUTE_VIEW', 'KYC_EDIT',
+    'KYC_REQUEST_APPROVE', 'KYC_REQUEST_CREATE', 'KYC_REQUEST_REJECT', 'KYC_REQUEST_UPDATE',
+    'KYC_REQUEST_VIEW', 'KYC_SEARCH', 'KYC_VIEW', 'LOAN_CLOSURE_VIEW',
+    'LOAN_EXPORT', 'LOAN_REPAYMENT_VIEW', 'LOAN_REQUEST_APPROVE', 'LOAN_REQUEST_CANCEL',
+    'LOAN_REQUEST_CREATE', 'LOAN_REQUEST_EDIT', 'LOAN_REQUEST_REJECT', 'LOAN_REQUEST_SUBMIT',
+    'LOAN_REQUEST_VIEW', 'LOAN_SEARCH', 'LOAN_VIEW', 'LOGIN_ACTIVITY_VIEW',
+    'MAINTENANCE_ACTIVATE', 'MAINTENANCE_CREATE', 'MAINTENANCE_DEACTIVATE', 'MAINTENANCE_EDIT',
+    'MAINTENANCE_VIEW', 'MOBILE_APPEARANCE_EDIT', 'MOBILE_APPEARANCE_VIEW', 'MOBILE_BRANDING_VIEW',
+    'REFUND_APPROVE', 'REFUND_CREATE', 'REFUND_EDIT', 'REFUND_REJECT',
+    'REFUND_SUBMIT', 'REFUND_VIEW', 'REPORT_EXPORT', 'REPORT_GENERATE',
+    'REPORT_SCHEDULE', 'REPORT_VIEW', 'RULE_ACTIVATE', 'RULE_CREATE',
+    'RULE_DEACTIVATE', 'RULE_DELETE', 'RULE_EDIT', 'RULE_VIEW',
+    'SECURITY_EVENT_VIEW', 'SERVICE_AVAILABILITY_EDIT', 'SERVICE_AVAILABILITY_VIEW', 'SERVICE_REQUEST_APPROVE',
+    'SERVICE_REQUEST_ASSIGN', 'SERVICE_REQUEST_CANCEL', 'SERVICE_REQUEST_CREATE', 'SERVICE_REQUEST_EDIT',
+    'SERVICE_REQUEST_EXPORT', 'SERVICE_REQUEST_REJECT', 'SERVICE_REQUEST_SUBMIT', 'SERVICE_REQUEST_VIEW',
+    'SESSION_VIEW', 'TRANSACTION_EXPORT', 'TRANSACTION_LIMIT_APPROVE', 'TRANSACTION_LIMIT_CREATE',
+    'TRANSACTION_LIMIT_EDIT', 'TRANSACTION_LIMIT_VIEW', 'TRANSACTION_SEARCH', 'TRANSACTION_VIEW',
+    'USER_ASSIGN_ROLE', 'USER_CREATE', 'USER_DISABLE', 'USER_EDIT',
+    'USER_ENABLE', 'USER_REMOVE_ROLE', 'USER_RESET_ACCESS', 'USER_SEARCH',
+    'USER_VIEW', 'USER_VIEW_ACTIVITY',
+  ],
+  // BANK_SUPER_ADMIN is the protected role -- always receives the entire catalogue and cannot
+  // be weakened through normal role administration (doc decision 9).
+  BANK_SUPER_ADMIN: [...ALL_PERMISSION_CODES],
+};

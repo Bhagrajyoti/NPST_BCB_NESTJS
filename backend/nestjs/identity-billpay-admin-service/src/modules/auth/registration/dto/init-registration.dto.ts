@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, Matches } from 'class-validator';
+import { REGEX } from '../../../../common/constants/regex.constant';
 
 export class InitRegistrationDto {
   @ApiProperty({
@@ -8,13 +9,6 @@ export class InitRegistrationDto {
   })
   @IsNotEmpty()
   @IsString()
+  @Matches(REGEX.MOBILE_NUMBER, { message: 'Must be a valid 10-digit Indian mobile number' })
   mobileNumber: string;
-
-  @ApiProperty({
-    description: 'Customer PAN or CIF used to identify the corporate/retail customer during mobile onboarding',
-    example: 'CIF12345',
-  })
-  @IsNotEmpty()
-  @IsString()
-  panOrCif: string;
 }

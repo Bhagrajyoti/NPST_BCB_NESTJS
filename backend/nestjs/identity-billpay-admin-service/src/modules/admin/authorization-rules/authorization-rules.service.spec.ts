@@ -43,7 +43,8 @@ describe('AuthorizationRulesService', () => {
       create: jest.fn((data) => data),
       save: jest.fn((data) => Promise.resolve(data)),
     };
-    service = new AuthorizationRulesService(rules as any, history as any);
+    const auditOutbox = { record: jest.fn().mockResolvedValue(undefined) };
+    service = new AuthorizationRulesService(rules as any, history as any, auditOutbox as any);
   });
 
   describe('findAll', () => {

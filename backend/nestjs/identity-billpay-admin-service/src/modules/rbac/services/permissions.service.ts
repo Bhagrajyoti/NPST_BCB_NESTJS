@@ -3,13 +3,19 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreatePermissionDto } from '../dto/permission.dto';
 import { Permission } from '../entities/permission.entity';
+import { AuditOutboxService } from '../../../clients/audit-outbox/audit-outbox.service';
 
 @Injectable()
 export class PermissionsService {
   constructor(
     @InjectRepository(Permission)
     private readonly permissions: Repository<Permission>,
+    private readonly auditOutbox: AuditOutboxService,
   ) {}
+
+  findAll() {
+    return this.permissions.find({ order: { module: 'ASC', action: 'ASC' } });
+  }
 
   async create(dto: CreatePermissionDto) {
     const existing = await this.permissions.findOne({ where: { code: dto.code } });
@@ -25,8 +31,15 @@ export class PermissionsService {
         module: dto.module,
         action: dto.action,
         isActive: true,
+        highRisk: dto.highRisk ?? false,
       }),
     );
+
+    await this.auditOutbox.record('PERMISSION_CREATED', {
+      permissionId: permission.id,
+      code: permission.code,
+      module: permission.module,
+    });
 
     return {
       id: permission.id,
@@ -36,6 +49,7 @@ export class PermissionsService {
       module: permission.module,
       action: permission.action,
       isActive: permission.isActive,
+      highRisk: permission.highRisk,
       createdAt: permission.createdAt,
       updatedAt: permission.updatedAt,
     };

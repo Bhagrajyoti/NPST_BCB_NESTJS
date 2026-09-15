@@ -1,11 +1,15 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { LoginDto } from '../session/dto/login.dto';
-import { LogoutDto } from '../session/dto/logout.dto';
-import { TokenResponseDto } from '../session/dto/token-response.dto';
+import { LoginDto } from '../token/dto/login.dto';
+import { LogoutDto } from '../token/dto/logout.dto';
+import { SignupDto } from '../token/dto/signup.dto';
+import { TokenResponseDto } from '../token/dto/token-response.dto';
+import { findMockUserByUsername } from './mock-users.const';
+
+const SIGNUP_ROLE = 'RETAIL_CUSTOMER';
 
 interface KeycloakTokenResponse {
   access_token: string;
@@ -49,7 +53,30 @@ export class KeycloakService {
     };
   }
 
+  private isMockAuth(): boolean {
+    return this.configService.get<string>('app.authMockMode') === 'true';
+  }
+
+  private mockLogin(dto: LoginDto): TokenResponseDto {
+    const user = findMockUserByUsername(dto.username);
+    if (!user || user.password !== dto.password) {
+      throw new UnauthorizedException('Invalid user credentials');
+    }
+    return {
+      accessToken: `mock-${user.username}-token`,
+      expiresIn: 86400,
+      refreshExpiresIn: 172800,
+      refreshToken: `mock-${user.username}-refresh`,
+      tokenType: 'Bearer',
+      scope: 'openid profile email',
+    };
+  }
+
   async login(dto: LoginDto): Promise<TokenResponseDto> {
+    if (this.isMockAuth()) {
+      return this.mockLogin(dto);
+    }
+
     const client = this.resolveClient(dto.clientId);
     const body = new URLSearchParams({
       grant_type: 'password',
@@ -88,6 +115,10 @@ export class KeycloakService {
   }
 
   async logout(dto: LogoutDto): Promise<{ loggedOut: boolean }> {
+    if (this.isMockAuth()) {
+      return { loggedOut: dto.refreshToken.startsWith('mock-') };
+    }
+
     const client = this.resolveClient(dto.clientId);
     const body = new URLSearchParams({
       client_id: client.clientId,
@@ -113,6 +144,33 @@ export class KeycloakService {
         'Logout failed';
       throw new UnauthorizedException(message);
     }
+  }
+
+  /**
+   * Self-service account creation: creates a real Keycloak user (role RETAIL_CUSTOMER) from
+   * just a username/password, so it can be used with POST /auth/login right away — no OTP,
+   * device, or multi-step saga (contrast with POST /auth/registration/*, which exists for the
+   * full customer-onboarding flow). Not affected by AUTH_MOCK_MODE — like createUser/
+   * assignRealmRoleToUser, this always calls the real Keycloak Admin API.
+   */
+  async signup(dto: SignupDto): Promise<{ keycloakUserId: string; username: string }> {
+    const existing = await this.findUsersByUsername(dto.username);
+    if (existing.length > 0) {
+      throw new ConflictException(`Username ${dto.username} already exists`);
+    }
+
+    const user = await this.createUser({
+      username: dto.username,
+      email: dto.email ?? `${dto.username}@signup.bharat-banking.local`,
+      firstName: dto.firstName ?? dto.username,
+      lastName: dto.lastName ?? dto.username,
+      password: dto.password,
+      enabled: true,
+    });
+
+    await this.assignRealmRoleToUser(user.id, SIGNUP_ROLE);
+
+    return { keycloakUserId: user.id, username: dto.username };
   }
 
   private adminBaseUrl(): string {
@@ -148,11 +206,24 @@ export class KeycloakService {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   }
 
+  /**
+   * Idempotent: if `payload.name` is already a realm role (e.g. one of the standard
+   * BANK_SUPER_ADMIN/BANK_ADMIN/BANK_MAKER/BANK_CHECKER roles a realm is commonly
+   * pre-provisioned with), adopts it instead of failing — Keycloak's POST /roles 409s on a
+   * name that already exists, and that used to surface as an opaque 500 all the way up
+   * through RolesService.create().
+   */
   async createRealmRole(payload: {
     name: string;
     description?: string;
   }): Promise<{ id: string; name: string }> {
     const token = await this.getAdminAccessToken();
+
+    const existing = await this.findRealmRoleByName(payload.name, token);
+    if (existing) {
+      return existing;
+    }
+
     await firstValueFrom(
       this.httpService.post(
         `${this.adminBaseUrl()}/roles`,
@@ -169,6 +240,27 @@ export class KeycloakService {
     );
 
     return { id: data.id, name: data.name };
+  }
+
+  /** Read-only lookup — never creates anything. Returns null on a 404, rethrows anything else. */
+  private async findRealmRoleByName(
+    name: string,
+    token: string,
+  ): Promise<{ id: string; name: string } | null> {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<{ id: string; name: string }>(
+          `${this.adminBaseUrl()}/roles/${encodeURIComponent(name)}`,
+          { headers: this.adminHeaders(token) },
+        ),
+      );
+      return { id: data.id, name: data.name };
+    } catch (error) {
+      if ((error as AxiosError).response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async updateRealmRole(

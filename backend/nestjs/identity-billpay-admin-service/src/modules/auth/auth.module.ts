@@ -13,13 +13,17 @@ import { DeviceController } from './device/device.controller';
 import { DeviceService } from './device/device.service';
 import { DeviceProfile } from './device/entities/device-profile.entity';
 import { CorporateHierarchyController } from './corporate-hierarchy/corporate-hierarchy.controller';
-import { SessionController } from './session/session.controller';
+import { AuthController } from './token/auth.controller';
 import { CorporateHierarchyService } from './corporate-hierarchy/corporate-hierarchy.service';
 import { CorporateHierarchy } from './corporate-hierarchy/entities/corporate-hierarchy.entity';
 import { OtpController } from './otp/otp.controller';
 import { OtpService } from './otp/otp.service';
 import { OtpChallenge } from './otp/entities/otp-challenge.entity';
 import { KeycloakService } from './keycloak/keycloak.service';
+import { BankAccountController } from './bank-account/bank-account.controller';
+import { BankAccountService } from './bank-account/bank-account.service';
+import { BankAccountSeeder } from './bank-account/bank-account.seeder';
+import { BankAccount } from './bank-account/entities/bank-account.entity';
 
 @Module({
   imports: [
@@ -30,6 +34,7 @@ import { KeycloakService } from './keycloak/keycloak.service';
       DeviceProfile,
       CorporateHierarchy,
       OtpChallenge,
+      BankAccount,
     ]),
   ],
   controllers: [
@@ -38,7 +43,8 @@ import { KeycloakService } from './keycloak/keycloak.service';
     DeviceController,
     CorporateHierarchyController,
     OtpController,
-    SessionController,
+    AuthController,
+    BankAccountController,
   ],
   providers: [
     RegistrationService,
@@ -49,6 +55,8 @@ import { KeycloakService } from './keycloak/keycloak.service';
     CorporateHierarchyService,
     OtpService,
     KeycloakService,
+    BankAccountService,
+    BankAccountSeeder,
   ],
   exports: [KeycloakService],
 })

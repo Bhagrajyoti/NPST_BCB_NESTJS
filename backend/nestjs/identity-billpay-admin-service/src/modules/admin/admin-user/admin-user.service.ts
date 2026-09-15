@@ -2,10 +2,10 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { extractRealmRoles } from '../../rbac/constants/rbac.constants';
-import { ListAdminUsersDto } from './dto/list-admin-users.dto';
 import { AdminUser } from './entities/admin-user.entity';
 
 const VIEW_ROLES = ['BANK_SUPER_ADMIN', 'BANK_ADMIN'];
+const LIST_ROLES = ['BANK_SUPER_ADMIN'];
 
 @Injectable()
 export class AdminUserService {
@@ -14,24 +14,13 @@ export class AdminUserService {
     private readonly repository: Repository<AdminUser>,
   ) {}
 
-  findAll(query: ListAdminUsersDto, actor: Record<string, unknown>) {
-    this.assertCanView(actor);
-    const qb = this.repository.createQueryBuilder('admin_user').orderBy('admin_user.createdAt', 'DESC');
-
-    if (query.role) {
-      qb.andWhere('admin_user.roleName = :role', { role: query.role });
-    }
-    if (query.search) {
-      qb.andWhere('(admin_user.username LIKE :search OR admin_user.email LIKE :search)', {
-        search: `%${query.search}%`,
-      });
-    }
-
-    return qb.getMany();
+  findAll(actor: Record<string, unknown>) {
+    this.assertRole(actor, LIST_ROLES, 'Only bank super admin users can list admin users');
+    return this.repository.find({ order: { createdAt: 'DESC' } });
   }
 
   async findOne(id: string, actor: Record<string, unknown>) {
-    this.assertCanView(actor);
+    this.assertRole(actor, VIEW_ROLES, 'Only bank admin or bank super admin users can view admin users');
     const adminUser = await this.repository.findOne({ where: { id } });
     if (!adminUser) {
       throw new NotFoundException('Admin user not found');
@@ -39,10 +28,10 @@ export class AdminUserService {
     return adminUser;
   }
 
-  private assertCanView(actor: Record<string, unknown>): void {
+  private assertRole(actor: Record<string, unknown>, allowed: string[], message: string): void {
     const roles = extractRealmRoles(actor);
-    if (!roles.some((role) => VIEW_ROLES.includes(role))) {
-      throw new ForbiddenException('Only bank admin or bank super admin users can view admin users');
+    if (!roles.some((role) => allowed.includes(role))) {
+      throw new ForbiddenException(message);
     }
   }
 }
