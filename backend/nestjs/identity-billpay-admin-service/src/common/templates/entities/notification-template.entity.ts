@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity({ name: 'notification_template', schema: 'admin' })
+@Entity({ name: 'notification_template' })
 export class NotificationTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;

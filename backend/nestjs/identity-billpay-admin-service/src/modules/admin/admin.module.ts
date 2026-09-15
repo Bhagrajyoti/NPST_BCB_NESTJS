@@ -11,6 +11,8 @@ import { AuthorizationRule } from './authorization-rules/entities/authorization-
 import { AuthorizationRuleHistory } from './authorization-rules/entities/authorization-rule-history.entity';
 import { ReportingController } from './reporting/reporting.controller';
 import { ReportingService } from './reporting/reporting.service';
+import { TransactionProvider } from './reporting/providers/transaction.provider';
+import { ReportExportService } from './reporting/exporters/report-export.service';
 
 @Module({
   imports: [
@@ -21,12 +23,15 @@ import { ReportingService } from './reporting/reporting.service';
     AdminUserController,
     AuthorizationRulesController,
     ReportingController,
+    
   ],
   providers: [
     AdminUserService,
     AdminUserSyncListener,
     AuthorizationRulesService,
     ReportingService,
+    TransactionProvider,
+    ReportExportService,
   ],
   exports: [],
 })

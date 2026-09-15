@@ -22,20 +22,16 @@ export class BillPayment {
     precision: 12,
     scale: 2,
   })
-
-  @Column({
-  type: 'decimal',
-  precision: 12,
-  scale: 2,
-})
-
-amount: number;
+  amount: number;
 
   @Column({ default: 'PENDING' })
   status: string;
 
   @Column({ name: 'idempotency_key', unique: true })
   idempotencyKey: string;
+
+  @Column({ name: 'keycloak_user_id', type: 'varchar', length: 36, nullable: true })
+  keycloakUserId: string | null;
 
   @Column({ name: 'bbps_reference_id', nullable: true })
   bbpsReferenceId: string;

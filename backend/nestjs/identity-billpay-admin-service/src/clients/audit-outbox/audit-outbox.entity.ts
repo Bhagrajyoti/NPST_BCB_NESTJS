@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity({ name: 'audit_outbox', schema: 'admin' })
+@Entity({ name: 'audit_outbox' })
 export class AuditOutbox {
   @PrimaryGeneratedColumn('uuid')
   id: string;

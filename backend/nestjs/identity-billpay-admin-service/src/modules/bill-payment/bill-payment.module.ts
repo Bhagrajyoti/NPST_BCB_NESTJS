@@ -1,43 +1,61 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+
 import { BillerController } from './biller/biller.controller';
 import { BillerService } from './biller/biller.service';
 import { BillerRegistration } from './biller/entities/biller-registration.entity';
+
 import { PaymentController } from './payment/payment.controller';
 import { PaymentService } from './payment/payment.service';
 import { BillPayment } from './payment/entities/bill-payment.entity';
+
+import { BillScheduleController } from './scheduling/bill-schedule.controller';
 import { BillScheduleService } from './scheduling/bill-schedule.service';
 import { BillSchedule } from './scheduling/entities/bill-schedule.entity';
+import { BillScheduleExecution } from './scheduling/entities/bill-schedule-execution.entity';
+
 import { MockBill } from './bill/entities/mock-bill.entity';
 import { BillController } from './bill/controller/bill.controller';
 import { BillService } from './bill/service/bill.service';
+
 import { BbpsAdapter } from './payment/adapter/bbps.adapter';
 import { MockBbpsAdapter } from './payment/adapter/mock-bbps.adapter';
+
+import { DemoBbpsData } from './demo/entities/demo-bbps-data.entity';
+import { BbpsCatalogSeeder } from './catalog/bbps-catalog.seeder';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       BillerRegistration,
       BillPayment,
       BillSchedule,
+      BillScheduleExecution,
       MockBill,
+      DemoBbpsData,
     ]),
   ],
+
   controllers: [
-  BillerController,
-  PaymentController,
-  BillController,
-],
+    BillerController,
+    PaymentController,
+    BillController,
+    BillScheduleController,
+  ],
+
   providers: [
-  BillerService,
-  PaymentService,
-  BillScheduleService,
-  BillService,
- MockBbpsAdapter,
-  {
-    provide: 'BBPS_ADAPTER',
-    useExisting: MockBbpsAdapter,
-  },
-],
+    BillerService,
+    PaymentService,
+    BillScheduleService,
+    BillService,
+    BbpsCatalogSeeder,
+    MockBbpsAdapter,
+    {
+      provide: 'BBPS_ADAPTER',
+      useExisting: MockBbpsAdapter,
+    },
+  ],
+
   exports: [PaymentService],
 })
 export class BillPaymentModule {}

@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity({ name: 'event_log', schema: 'admin' })
+@Entity({ name: 'event_log' })
 export class EventLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;

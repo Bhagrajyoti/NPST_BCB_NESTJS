@@ -2,6 +2,64 @@ export const SUPERADMIN_ROLES = ['BANK_SUPER_ADMIN', 'SUPERADMIN', 'superadmin']
 
 export const DELEGATING_ADMIN_ROLES = ['BANK_ADMIN', 'BANK_SUPER_ADMIN'] as const;
 
+/** Master biller catalog write (bank operations only). */
+export const BANK_CATALOG_ADMIN_ROLES = ['BANK_SUPER_ADMIN', 'BANK_ADMIN'] as const;
+
+/** Shared biller catalog reads (admin web + mobile). */
+export const BBPS_CATALOG_READ_ROLES = [
+  'BANK_SUPER_ADMIN',
+  'BANK_ADMIN',
+  'RETAIL_CUSTOMER',
+  'CORPORATE_IT_ADMIN',
+  'CORPORATE_MAKER',
+  'CORPORATE_CHECKER',
+  'CORPORATE_VIEWER',
+] as const;
+
+/** Customer-facing realm roles (mobile), excluding bank staff. */
+export const BBPS_CUSTOMER_ROLES = [
+  'RETAIL_CUSTOMER',
+  'CORPORATE_IT_ADMIN',
+  'CORPORATE_MAKER',
+  'CORPORATE_CHECKER',
+  'CORPORATE_VIEWER',
+] as const;
+
+/** Customer bill fetch (mobile). */
+export const BBPS_BILL_FETCH_ROLES = BBPS_CUSTOMER_ROLES;
+
+export const BBPS_PAYMENT_CREATE_ROLES = [
+  'RETAIL_CUSTOMER',
+  'CORPORATE_IT_ADMIN',
+  'CORPORATE_MAKER',
+] as const;
+
+export const BBPS_PAYMENT_RETRY_ROLES = [
+  'RETAIL_CUSTOMER',
+  'CORPORATE_MAKER',
+  'CORPORATE_IT_ADMIN',
+] as const;
+
+export const BBPS_SCHEDULE_MUTATION_ROLES = [
+  'RETAIL_CUSTOMER',
+  'CORPORATE_MAKER',
+  'CORPORATE_IT_ADMIN',
+] as const;
+
+export const BBPS_PAYMENT_READ_CUSTOMER_ROLES = BBPS_BILL_FETCH_ROLES;
+
+export const BBPS_PAYMENT_BANK_READ_ROLES = BANK_CATALOG_ADMIN_ROLES;
+
+export const BBPS_SCHEDULE_READ_ROLES = BBPS_SCHEDULE_MUTATION_ROLES;
+
+export function hasAnyRealmRole(
+  user: Record<string, unknown> | undefined,
+  allowed: readonly string[],
+): boolean {
+  const roles = extractRealmRoles(user);
+  return roles.some((role) => allowed.includes(role));
+}
+
 /** Lower number = lower privilege. Higher number = higher in org hierarchy. */
 export const ROLE_HIERARCHY_LEVELS: Record<string, number> = {
   BANK_SUPER_ADMIN: 100,
